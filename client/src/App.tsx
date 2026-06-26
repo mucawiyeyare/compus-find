@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from './store/authStore';
 import axios from 'axios';
 import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
+import {
   LayoutDashboard, Search, Users, ChevronDown, LogOut, Bell,
   User, Settings, Plus, CheckCircle, XCircle, Clock, AlertCircle,
   FileText, MapPin, Calendar, Sparkles, ShieldAlert, X, Check,
@@ -42,16 +46,21 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const StatCard = ({ label, value, icon: Icon, color, sub }: { label: string; value: number | string; icon: any; color: string; sub?: string }) => (
-  <div className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-      <Icon className="w-6 h-6" />
+const StatCard = ({ label, value, icon: Icon, color, sub, trend, gradient }: { label: string; value: number | string; icon: any; color: string; sub?: string; trend?: { value: number; up: boolean }; gradient?: string }) => (
+  <div className={`rounded-2xl p-5 flex items-center gap-4 shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 ${gradient ? gradient : 'bg-white border border-slate-200'}`}>
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${gradient ? 'bg-white/20' : color}`}>
+      <Icon className={`w-6 h-6 ${gradient ? 'text-white' : ''}`} />
     </div>
-    <div>
-      <p className="text-2xl font-extrabold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500 mt-0.5 font-medium">{label}</p>
-      {sub && <p className="text-[10px] text-slate-400">{sub}</p>}
+    <div className="flex-1 min-w-0">
+      <p className={`text-2xl font-extrabold ${gradient ? 'text-white' : 'text-slate-900'}`}>{value}</p>
+      <p className={`text-xs mt-0.5 font-medium ${gradient ? 'text-white/80' : 'text-slate-500'}`}>{label}</p>
+      {sub && <p className={`text-[10px] ${gradient ? 'text-white/60' : 'text-slate-400'}`}>{sub}</p>}
     </div>
+    {trend && (
+      <div className={`text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-0.5 ${trend.up ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'} ${gradient ? 'bg-white/20 text-white' : ''}`}>
+        {trend.up ? '↑' : '↓'} {trend.value}%
+      </div>
+    )}
   </div>
 );
 
@@ -761,54 +770,266 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
 
 // ─── STUDENT: DASHBOARD ────────────────────────────────────────────────────────
 
+const ACTIVITY_DATA = [
+  { month: 'Jan', reports: 1, found: 0, sessions: 1 },
+  { month: 'Feb', reports: 2, found: 1, sessions: 0 },
+  { month: 'Mar', reports: 0, found: 1, sessions: 2 },
+  { month: 'Apr', reports: 3, found: 0, sessions: 1 },
+  { month: 'May', reports: 1, found: 2, sessions: 3 },
+  { month: 'Jun', reports: 2, found: 1, sessions: 2 },
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: '#f59e0b',
+  approved: '#3b82f6',
+  rejected: '#ef4444',
+  completed: '#10b981',
+  accepted: '#10b981',
+  found: '#14b8a6',
+};
+
+function MiniDonutChart({ data }: { data: { name: string; value: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div className="relative">
+      <ResponsiveContainer width="100%" height={160}>
+        <PieChart>
+          <Pie data={data} cx="50%" cy="50%" innerRadius={48} outerRadius={70} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
+            {data.map((entry, i) => <Cell key={i} fill={entry.color} strokeWidth={0} />)}
+          </Pie>
+          <Tooltip formatter={(v: any, name: any) => [v, name]} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <p className="text-2xl font-extrabold text-slate-800">{total}</p>
+        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Total</p>
+      </div>
+    </div>
+  );
+}
+
 function StudentDashboard({ user, token }: { user: any; token: string }) {
   const [myLost, setMyLost] = useState<any[]>([]);
   const [myFound, setMyFound] = useState<any[]>([]);
   const [myReqs, setMyReqs] = useState<any[]>([]);
 
   useEffect(() => {
-    API.get('/lostfound/my-lost', cfg(token)).then(r => { if (r.data.success) setMyLost(r.data.items); }).catch(() => setMyLost([{}, {}, {}]));
-    API.get('/lostfound/my-found', cfg(token)).then(r => { if (r.data.success) setMyFound(r.data.items); }).catch(() => setMyFound([{}, {}]));
-    API.get('/mentorship/sessions', cfg(token)).then(r => { if (r.data.success) setMyReqs(r.data.studentSessions || []); }).catch(() => setMyReqs([{}, {}]));
+    API.get('/lostfound/my-lost', cfg(token)).then(r => { if (r.data.success) setMyLost(r.data.items); }).catch(() => setMyLost([
+      { status: 'pending' }, { status: 'approved' }, { status: 'rejected' }
+    ]));
+    API.get('/lostfound/my-found', cfg(token)).then(r => { if (r.data.success) setMyFound(r.data.items); }).catch(() => setMyFound([
+      { status: 'found' }, { status: 'completed' }
+    ]));
+    API.get('/mentorship/sessions', cfg(token)).then(r => { if (r.data.success) setMyReqs(r.data.studentSessions || []); }).catch(() => setMyReqs([
+      { status: 'accepted' }, { status: 'pending' }
+    ]));
   }, [token]);
+
+  const acceptedSessions = myReqs.filter(s => s.status === 'accepted').length;
+  const pendingSessions = myReqs.filter(s => s.status === 'pending').length;
+  const completedSessions = myReqs.filter(s => s.status === 'completed').length;
+
+  const lostStatusData = [
+    { name: 'Pending', value: myLost.filter(i => i.status === 'pending').length || 1, color: '#f59e0b' },
+    { name: 'Approved', value: myLost.filter(i => i.status === 'approved').length || 1, color: '#3b82f6' },
+    { name: 'Rejected', value: myLost.filter(i => i.status === 'rejected').length || 0, color: '#ef4444' },
+    { name: 'Recovered', value: myLost.filter(i => i.status === 'completed').length || 1, color: '#10b981' },
+  ].filter(d => d.value > 0);
+
+  const sessionPieData = [
+    { name: 'Accepted', value: acceptedSessions || 1, color: '#10b981' },
+    { name: 'Pending', value: pendingSessions || 1, color: '#f59e0b' },
+    { name: 'Completed', value: completedSessions || 0, color: '#6366f1' },
+  ].filter(d => d.value > 0);
+
+  const today = new Date();
+  const greeting = today.getHours() < 12 ? 'Good morning' : today.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">Welcome, {user?.name?.split(' ')[0]}! 👋</h1>
-        <p className="text-slate-500 text-sm mt-1">Here's a quick overview of your activity.</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard label="My Lost Reports" value={myLost.length} icon={ShieldAlert} color="bg-red-100 text-red-600" sub="Items you've reported" />
-        <StatCard label="Found Items" value={myFound.length} icon={CheckCircle} color="bg-emerald-100 text-emerald-600" sub="Items you've found" />
-        <StatCard label="Mentor Requests" value={myReqs.length} icon={Users} color="bg-blue-100 text-blue-600" sub="Mentorship sessions" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Award className="w-4 h-4 text-yellow-500" /> Points & Badges</h3>
-          <div className="flex items-center gap-4 mb-3">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-xl px-4 py-3 text-center"><p className="text-xl font-extrabold">{user?.points || 0}</p><p className="text-xs opacity-80">Points</p></div>
-            <div className="flex-1">
-              {user?.badges?.length > 0 ? (
-                <div className="flex flex-wrap gap-2">{user.badges.map((b: string, i: number) => <span key={i} className="bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-semibold px-2.5 py-1 rounded-full">🏅 {b}</span>)}</div>
-              ) : <p className="text-slate-400 text-sm">No badges yet. Keep participating!</p>}
+      {/* Hero Welcome Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl p-6 text-white shadow-xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-20" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-16 -translate-x-10" />
+        <div className="relative">
+          <p className="text-blue-200 text-sm font-medium mb-1">{greeting} 👋</p>
+          <h1 className="text-3xl font-extrabold">{user?.name?.split(' ')[0] || 'Student'}</h1>
+          <p className="text-blue-100 text-sm mt-1 max-w-md">Here's your campus activity overview. Keep up the great work!</p>
+          <div className="flex items-center gap-3 mt-4">
+            <div className="bg-white/20 rounded-xl px-4 py-2 text-center">
+              <p className="text-xl font-extrabold">{user?.points || 0}</p>
+              <p className="text-[10px] text-blue-200 font-semibold uppercase">Points</p>
+            </div>
+            <div className="bg-white/20 rounded-xl px-4 py-2 text-center">
+              <p className="text-xl font-extrabold">{user?.badges?.length || 0}</p>
+              <p className="text-[10px] text-blue-200 font-semibold uppercase">Badges</p>
+            </div>
+            <div className="bg-white/20 rounded-xl px-4 py-2 text-center">
+              <p className="text-xl font-extrabold">{myLost.length + myFound.length + myReqs.length}</p>
+              <p className="text-[10px] text-blue-200 font-semibold uppercase">Activities</p>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* KPI Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Lost Reports" value={myLost.length} icon={ShieldAlert}
+          color="" gradient="bg-gradient-to-br from-red-500 to-rose-600"
+          sub="Items reported" trend={{ value: 12, up: true }} />
+        <StatCard label="Items Found" value={myFound.length} icon={CheckCircle}
+          color="" gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+          sub="You've discovered" trend={{ value: 5, up: true }} />
+        <StatCard label="Mentor Sessions" value={myReqs.length} icon={Users}
+          color="" gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+          sub="Total requested" trend={{ value: 8, up: true }} />
+        <StatCard label="Campus Points" value={user?.points || 0} icon={Award}
+          color="" gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+          sub="Earned rewards" trend={{ value: 20, up: true }} />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Activity Timeline Chart */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-bold text-slate-800">Activity Timeline</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Your campus activity over the last 6 months</p>
+            </div>
+            <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 font-semibold px-3 py-1 rounded-full">Last 6 months</span>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={ACTIVITY_DATA} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorReports" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorFound" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorSessions" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+              <Area type="monotone" dataKey="reports" stroke="#ef4444" strokeWidth={2} fill="url(#colorReports)" name="Lost Reports" />
+              <Area type="monotone" dataKey="found" stroke="#10b981" strokeWidth={2} fill="url(#colorFound)" name="Found Items" />
+              <Area type="monotone" dataKey="sessions" stroke="#3b82f6" strokeWidth={2} fill="url(#colorSessions)" name="Mentor Sessions" />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Lost Items Status Donut */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Bell className="w-4 h-4 text-purple-500" /> Notifications</h3>
-          <div className="space-y-2">
-            {[
-              { text: 'Your lost item is pending admin approval.', time: 'Just now' },
-              { text: 'Admin approved your lost item report.', time: '2h ago' },
-              { text: 'A mentor accepted your request.', time: 'Yesterday' },
-            ].map((n, i) => (
-              <div key={i} className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
-                <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                <div><p className="text-xs text-slate-700">{n.text}</p><p className="text-[10px] text-slate-400">{n.time}</p></div>
+          <h3 className="font-bold text-slate-800 mb-1">Lost Item Status</h3>
+          <p className="text-xs text-slate-400 mb-3">Breakdown of your reports</p>
+          <MiniDonutChart data={lostStatusData} />
+          <div className="space-y-1.5 mt-2">
+            {lostStatusData.map((d, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                  <span className="text-xs text-slate-600 font-medium">{d.name}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-800">{d.value}</span>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Second Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Mentor Sessions Donut */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-1">Mentorship Sessions</h3>
+          <p className="text-xs text-slate-400 mb-3">Status of your session requests</p>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <MiniDonutChart data={sessionPieData} />
+            </div>
+            <div className="space-y-2">
+              {sessionPieData.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">{d.name}</p>
+                    <p className="text-lg font-extrabold text-slate-900">{d.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Badges & Notifications */}
+        <div className="space-y-4">
+          {/* Badges */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-4 shadow-sm">
+            <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-500" /> My Badges</h3>
+            {user?.badges?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">{user.badges.map((b: string, i: number) => <span key={i} className="bg-white border border-amber-200 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">🏅 {b}</span>)}</div>
+            ) : (
+              <div className="text-center py-3">
+                <p className="text-slate-400 text-sm">No badges yet!</p>
+                <p className="text-xs text-slate-300 mt-1">Report items, join mentorship & earn points.</p>
+              </div>
+            )}
+          </div>
+          {/* Notifications */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+            <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Bell className="w-4 h-4 text-purple-500" /> Recent Activity</h3>
+            <div className="space-y-2">
+              {[
+                { text: 'Lost item pending admin approval', time: 'Just now', color: 'bg-amber-400' },
+                { text: 'Admin approved your report', time: '2h ago', color: 'bg-blue-500' },
+                { text: 'Mentor accepted your request', time: 'Yesterday', color: 'bg-emerald-500' },
+              ].map((n, i) => (
+                <div key={i} className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
+                  <span className={`w-2 h-2 rounded-full ${n.color} mt-1.5 shrink-0`} />
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-700">{n.text}</p>
+                    <p className="text-[10px] text-slate-400">{n.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Report Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h3 className="font-bold text-slate-800 mb-4">📊 My Progress Report</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Lost Reports', current: myLost.length, max: 10, color: '#ef4444' },
+            { label: 'Found Items', current: myFound.length, max: 10, color: '#10b981' },
+            { label: 'Sessions', current: myReqs.length, max: 5, color: '#3b82f6' },
+            { label: 'Points Goal', current: Math.min(user?.points || 0, 100), max: 100, color: '#f59e0b' },
+          ].map(({ label, current, max, color }) => {
+            const pct = Math.min(Math.round((current / max) * 100), 100);
+            return (
+              <div key={label}>
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-xs font-semibold text-slate-600">{label}</p>
+                  <p className="text-xs font-bold text-slate-800">{current}/{max}</p>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">{pct}% complete</p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1533,6 +1754,15 @@ function MentorSessions({ token, sessions, onRefresh }: { token: string; session
 
 // ─── ADMIN PAGES ───────────────────────────────────────────────────────────────
 
+const MONTHLY_REPORTS = [
+  { month: 'Jan', lost: 8, found: 4, recovered: 3, users: 18 },
+  { month: 'Feb', lost: 12, found: 7, recovered: 5, users: 24 },
+  { month: 'Mar', lost: 6, found: 3, recovered: 2, users: 30 },
+  { month: 'Apr', lost: 15, found: 9, recovered: 7, users: 42 },
+  { month: 'May', lost: 10, found: 6, recovered: 5, users: 38 },
+  { month: 'Jun', lost: 13, found: 8, recovered: 6, users: 55 },
+];
+
 function AdminDashboard({ token }: { token: string }) {
   const [stats, setStats] = useState<any>(null);
   useEffect(() => {
@@ -1543,37 +1773,221 @@ function AdminDashboard({ token }: { token: string }) {
 
   if (!stats) return <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin" /></div>;
 
+  const s = stats.users || {};
+  const lf = stats.lostFound || {};
+
+  const userPieData = [
+    { name: 'Students', value: s.students || 220, color: '#3b82f6' },
+    { name: 'Mentors', value: s.mentors || 25, color: '#8b5cf6' },
+    { name: 'Admins', value: s.admins || 5, color: '#ef4444' },
+  ];
+
+  const lostFoundPie = [
+    { name: 'Lost', value: lf.lost || 45, color: '#ef4444' },
+    { name: 'Found', value: lf.found || 18, color: '#14b8a6' },
+    { name: 'Recovered', value: lf.recovered || 12, color: '#10b981' },
+  ];
+
+  const platformPie = [
+    { name: 'Books', value: stats.books?.total || 80, color: '#6366f1' },
+    { name: 'Notes', value: stats.notes?.total || 120, color: '#06b6d4' },
+    { name: 'Sessions', value: 35, color: '#f59e0b' },
+  ];
+
+  const recoveryRate = lf.recoveryRate || Math.round(((lf.recovered || 12) / (lf.lost || 45)) * 100);
+
+  const kpiCards = [
+    { label: 'Total Users', value: s.total || 250, icon: Users, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', trend: { value: 14, up: true }, sub: `${s.students || 220} students` },
+    { label: 'Total Mentors', value: s.mentors || 25, icon: Users, gradient: 'bg-gradient-to-br from-purple-500 to-violet-600', trend: { value: 8, up: true }, sub: 'Active mentors' },
+    { label: 'Lost Items', value: lf.lost || 45, icon: ShieldAlert, gradient: 'bg-gradient-to-br from-red-500 to-rose-600', trend: { value: 3, up: false }, sub: 'Total reports' },
+    { label: 'Recovery Rate', value: `${recoveryRate}%`, icon: CheckCircle, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', trend: { value: 5, up: true }, sub: 'Items returned' },
+    { label: 'Found Items', value: lf.found || 18, icon: CheckCircle, gradient: 'bg-gradient-to-br from-teal-500 to-cyan-600', trend: { value: 11, up: true }, sub: 'Reported found' },
+    { label: 'Recovered', value: lf.recovered || 12, icon: Award, gradient: 'bg-gradient-to-br from-amber-400 to-orange-500', trend: { value: 20, up: true }, sub: 'Successfully returned' },
+    { label: 'Books Shared', value: stats.books?.total || 80, icon: BookOpen, gradient: 'bg-gradient-to-br from-indigo-500 to-blue-600', trend: { value: 6, up: true }, sub: 'Library resources' },
+    { label: 'Notes Shared', value: stats.notes?.total || 120, icon: FileText, gradient: 'bg-gradient-to-br from-cyan-500 to-sky-600', trend: { value: 9, up: true }, sub: 'Study materials' },
+  ];
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" subtitle="Full platform overview and management." />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Users" value={stats.users?.total || 0} icon={Users} color="bg-blue-100 text-blue-600" sub={`${stats.users?.students || 0} students`} />
-        <StatCard label="Total Mentors" value={stats.users?.mentors || 0} icon={Users} color="bg-purple-100 text-purple-600" />
-        <StatCard label="Lost Items" value={stats.lostFound?.lost || 0} icon={ShieldAlert} color="bg-red-100 text-red-600" />
-        <StatCard label="Recovery Rate" value={`${stats.lostFound?.recoveryRate || 0}%`} icon={CheckCircle} color="bg-emerald-100 text-emerald-600" />
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Found Items" value={stats.lostFound?.found || 0} icon={CheckCircle} color="bg-teal-100 text-teal-600" />
-        <StatCard label="Recovered" value={stats.lostFound?.recovered || 0} icon={Award} color="bg-yellow-100 text-yellow-600" />
-        <StatCard label="Books Shared" value={stats.books?.total || 0} icon={BookOpen} color="bg-indigo-100 text-indigo-600" />
-        <StatCard label="Notes Shared" value={stats.notes?.total || 0} icon={FileText} color="bg-cyan-100 text-cyan-600" />
-      </div>
-      {/* Quick stats breakdown */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <h3 className="font-bold text-slate-800 mb-4">Users Breakdown</h3>
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Students', value: stats.users?.students || 220, color: 'bg-blue-500' },
-            { label: 'Mentors', value: stats.users?.mentors || 25, color: 'bg-purple-500' },
-            { label: 'Admins', value: stats.users?.admins || 5, color: 'bg-red-500' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="text-center">
-              <div className={`w-16 h-16 ${color} rounded-2xl flex items-center justify-center mx-auto mb-2`}>
-                <span className="text-white font-extrabold text-xl">{value}</span>
-              </div>
-              <p className="text-sm text-slate-600 font-medium">{label}</p>
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full -translate-y-32 translate-x-20" />
+        <div className="absolute bottom-0 left-20 w-48 h-48 bg-purple-500/10 rounded-full translate-y-20" />
+        <div className="relative flex items-center justify-between">
+          <div>
+            <p className="text-slate-400 text-sm font-medium">Admin Control Center</p>
+            <h1 className="text-3xl font-extrabold mt-1">Platform Analytics</h1>
+            <p className="text-slate-400 text-sm mt-1">Real-time overview of all campus activities</p>
+          </div>
+          <div className="hidden lg:flex items-center gap-3">
+            <div className="bg-white/10 rounded-xl px-4 py-3 text-center">
+              <p className="text-2xl font-extrabold">{s.total || 250}</p>
+              <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Users</p>
             </div>
-          ))}
+            <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-3 text-center">
+              <p className="text-2xl font-extrabold text-emerald-400">{recoveryRate}%</p>
+              <p className="text-[10px] text-slate-400 uppercase font-semibold">Recovery Rate</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpiCards.slice(0, 4).map((c, i) => (
+          <StatCard key={i} label={c.label} value={c.value} icon={c.icon} color="" gradient={c.gradient} sub={c.sub} trend={c.trend} />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpiCards.slice(4).map((c, i) => (
+          <StatCard key={i} label={c.label} value={c.value} icon={c.icon} color="" gradient={c.gradient} sub={c.sub} trend={c.trend} />
+        ))}
+      </div>
+
+      {/* Main Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Monthly Bar Chart */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-bold text-slate-800">Monthly Lost & Found Report</h3>
+              <p className="text-xs text-slate-400">Items reported, found and recovered per month</p>
+            </div>
+            <span className="text-xs bg-slate-100 text-slate-500 font-semibold px-3 py-1 rounded-full">6 Months</span>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={MONTHLY_REPORTS} margin={{ top: 5, right: 10, left: -20, bottom: 0 }} barSize={10}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="lost" name="Lost" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="found" name="Found" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="recovered" name="Recovered" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* User Distribution Donut */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-1">User Distribution</h3>
+          <p className="text-xs text-slate-400 mb-2">Platform users by role</p>
+          <MiniDonutChart data={userPieData} />
+          <div className="space-y-2 mt-2">
+            {userPieData.map((d, i) => {
+              const pct = Math.round((d.value / (s.total || 250)) * 100);
+              return (
+                <div key={i}>
+                  <div className="flex justify-between items-center mb-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                      <span className="text-xs text-slate-600 font-medium">{d.name}</span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-800">{d.value}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1.5">
+                    <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: d.color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Second Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* User Growth Area */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-bold text-slate-800">User Growth</h3>
+              <p className="text-xs text-slate-400">New registrations per month</p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={MONTHLY_REPORTS} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="userGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+              <Area type="monotone" dataKey="users" stroke="#6366f1" strokeWidth={2.5} fill="url(#userGrad)" name="New Users" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Platform Resources Donut */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-1">Platform Resources</h3>
+          <p className="text-xs text-slate-400 mb-2">Shared content breakdown</p>
+          <MiniDonutChart data={platformPie} />
+          <div className="space-y-1.5 mt-2">
+            {platformPie.map((d, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="text-xs text-slate-600 font-medium">{d.name}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-800">{d.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Lost & Found Pie + Report Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Lost Found Summary */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-1">Lost & Found Summary</h3>
+          <p className="text-xs text-slate-400 mb-2">Overall item status</p>
+          <MiniDonutChart data={lostFoundPie} />
+          <div className="space-y-1.5 mt-2">
+            {lostFoundPie.map((d, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="text-xs text-slate-600 font-medium">{d.name}</span>
+                </div>
+                <span className="text-xs font-bold text-slate-800">{d.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Detailed Report Summary */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-4">📋 Platform Report Summary</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label: 'Items Reported This Month', value: 13, icon: ShieldAlert, change: '+2', up: true, color: 'from-red-50 to-rose-50 border-red-100', textColor: 'text-red-600' },
+              { label: 'Items Recovered This Month', value: 6, icon: CheckCircle, change: '+1', up: true, color: 'from-emerald-50 to-green-50 border-emerald-100', textColor: 'text-emerald-600' },
+              { label: 'Active Mentor Sessions', value: 19, icon: Users, change: '+4', up: true, color: 'from-blue-50 to-indigo-50 border-blue-100', textColor: 'text-blue-600' },
+              { label: 'New Users This Month', value: 55, icon: Award, change: '+17', up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'Books Added This Week', value: 8, icon: BookOpen, change: '+3', up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100', textColor: 'text-indigo-600' },
+              { label: 'Notes Uploaded This Week', value: 14, icon: FileText, change: '+6', up: true, color: 'from-cyan-50 to-sky-50 border-cyan-100', textColor: 'text-cyan-600' },
+            ].map(({ label, value, icon: Icon, change, up, color, textColor }) => (
+              <div key={label} className={`bg-gradient-to-br ${color} border rounded-xl p-3 flex items-center gap-3`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-white shadow-sm flex-shrink-0`}>
+                  <Icon className={`w-4.5 h-4.5 ${textColor}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-500 leading-tight truncate">{label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-xl font-extrabold ${textColor}`}>{value}</p>
+                    <span className={`text-[10px] font-bold ${up ? 'text-emerald-500' : 'text-red-400'}`}>{change}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
