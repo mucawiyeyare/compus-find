@@ -31,7 +31,8 @@ import {
   updateSettings,
   getAuditLogs,
   exportDatabase,
-  importDatabase
+  importDatabase,
+  getReportTrends
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -42,6 +43,7 @@ router.use(authorize('admin'));
 
 // Stats & logs
 router.get('/stats', getAdminStats);
+router.get('/report-trends', getReportTrends);
 router.get('/logs', getAuditLogs);
 
 // Users

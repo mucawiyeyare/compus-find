@@ -12,6 +12,7 @@ import ContactMessage from '../models/ContactMessage';
 import Event from '../models/Event';
 import AuditLog from '../models/AuditLog';
 import SystemSetting from '../models/SystemSetting';
+import Session from '../models/Session';
 import { AuthRequest } from '../middlewares/auth';
 import bcrypt from 'bcryptjs';
 
@@ -54,6 +55,12 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
     const totalGroups = await StudyGroup.countDocuments();
     const totalEvents = await Event.countDocuments();
 
+    // Mentorship sessions
+    const totalSessions = await Session.countDocuments();
+    const completedSessions = await Session.countDocuments({ status: 'completed' });
+    const acceptedSessions = await Session.countDocuments({ status: 'accepted' });
+    const pendingSessions = await Session.countDocuments({ status: 'pending' });
+
     // Top active mentors
     const activeMentors = await Mentor.find()
       .populate('user', 'name email avatar')
@@ -74,7 +81,8 @@ export const getAdminStats = async (req: AuthRequest, res: Response) => {
         books: { total: totalBooks, available: availableBooks },
         notes: { total: totalNotes },
         groups: { total: totalGroups },
-        events: { total: totalEvents }
+        events: { total: totalEvents },
+        sessions: { total: totalSessions, completed: completedSessions, accepted: acceptedSessions, pending: pendingSessions }
       },
       activeMentors,
       recentLogs
@@ -616,6 +624,101 @@ export const resolveContactMessage = async (req: AuthRequest, res: Response) => 
 
     await logAdminAction(req, 'RESOLVE_CONTACT_MESSAGE', `Contact Message ID: ${id}`);
     return res.status(200).json({ success: true, message: 'Message resolved successfully', msg });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- Report Trends (monthly aggregation for charts) ---
+export const getReportTrends = async (req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    // Helper: group by month
+    const monthlyGroup = (dateField: string) => ([
+      { $match: { [dateField]: { $gte: sixMonthsAgo } } },
+      { $group: {
+          _id: { year: { $year: `$${dateField}` }, month: { $month: `$${dateField}` } },
+          count: { $sum: 1 }
+      }},
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    const [lostByMonth, foundByMonth, usersByMonth, booksByMonth, notesByMonth, sessionsByMonth] = await Promise.all([
+      LostItem.aggregate(monthlyGroup('createdAt') as any),
+      FoundItem.aggregate(monthlyGroup('createdAt') as any),
+      User.aggregate(monthlyGroup('createdAt') as any),
+      Book.aggregate(monthlyGroup('createdAt') as any),
+      Note.aggregate(monthlyGroup('createdAt') as any),
+      Session.aggregate(monthlyGroup('createdAt') as any),
+    ]);
+
+    // Category breakdown for lost items
+    const lostByCategory = await LostItem.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 }
+    ]);
+
+    // Department breakdown for users
+    const usersByDept = await User.aggregate([
+      { $match: { department: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$department', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 }
+    ]);
+
+    // Role breakdown
+    const usersByRole = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+
+    // Lost item status breakdown
+    const lostByStatus = await LostItem.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // Session status breakdown
+    const sessionsByStatus = await Session.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // Top subjects for sessions
+    const sessionsBySubject = await Session.aggregate([
+      { $group: { _id: '$subject', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 8 }
+    ]);
+
+    // Recovered count (found items with status 'returned')
+    const recoveredByMonth = await FoundItem.aggregate([
+      { $match: { status: 'returned', createdAt: { $gte: sixMonthsAgo } } },
+      { $group: {
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          count: { $sum: 1 }
+      }},
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      trends: {
+        lostByMonth,
+        foundByMonth,
+        recoveredByMonth,
+        usersByMonth,
+        booksByMonth,
+        notesByMonth,
+        sessionsByMonth,
+        lostByCategory,
+        usersByDept,
+        usersByRole,
+        lostByStatus,
+        sessionsByStatus,
+        sessionsBySubject
+      }
+    });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }

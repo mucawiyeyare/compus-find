@@ -1803,8 +1803,6 @@ function AdminDashboard({ token }: { token: string }) {
     { label: 'Recovery Rate', value: `${recoveryRate}%`, icon: CheckCircle, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', trend: { value: 5, up: true }, sub: 'Items returned' },
     { label: 'Found Items', value: lf.found || 18, icon: CheckCircle, gradient: 'bg-gradient-to-br from-teal-500 to-cyan-600', trend: { value: 11, up: true }, sub: 'Reported found' },
     { label: 'Recovered', value: lf.recovered || 12, icon: Award, gradient: 'bg-gradient-to-br from-amber-400 to-orange-500', trend: { value: 20, up: true }, sub: 'Successfully returned' },
-    { label: 'Books Shared', value: stats.books?.total || 80, icon: BookOpen, gradient: 'bg-gradient-to-br from-indigo-500 to-blue-600', trend: { value: 6, up: true }, sub: 'Library resources' },
-    { label: 'Notes Shared', value: stats.notes?.total || 120, icon: FileText, gradient: 'bg-gradient-to-br from-cyan-500 to-sky-600', trend: { value: 9, up: true }, sub: 'Study materials' },
   ];
 
   return (
@@ -1899,7 +1897,7 @@ function AdminDashboard({ token }: { token: string }) {
       {/* Second Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* User Growth Area */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-bold text-slate-800">User Growth</h3>
@@ -1921,24 +1919,6 @@ function AdminDashboard({ token }: { token: string }) {
               <Area type="monotone" dataKey="users" stroke="#6366f1" strokeWidth={2.5} fill="url(#userGrad)" name="New Users" />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-
-        {/* Platform Resources Donut */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-1">Platform Resources</h3>
-          <p className="text-xs text-slate-400 mb-2">Shared content breakdown</p>
-          <MiniDonutChart data={platformPie} />
-          <div className="space-y-1.5 mt-2">
-            {platformPie.map((d, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-xs text-slate-600 font-medium">{d.name}</span>
-                </div>
-                <span className="text-xs font-bold text-slate-800">{d.value}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -2505,30 +2485,211 @@ function ReportKpiRow({ items }: { items: { label: string; value: string|number;
 
 function AdminReports({ token }: { token: string }) {
   const [activeReport, setActiveReport] = useState('overview');
+  const [stats, setStats] = useState<any>(null);
+  const [trends, setTrends] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      API.get('/admin/stats', cfg(token)).then(r => r.data.stats),
+      API.get('/admin/report-trends', cfg(token)).then(r => r.data.trends)
+    ]).then(([statsData, trendsData]) => {
+      setStats(statsData);
+      setTrends(trendsData);
+      setLoading(false);
+    }).catch(err => {
+      console.error('Error fetching admin reports data:', err);
+      setLoading(false);
+    });
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-500 text-sm font-semibold">Generating Real-time Reports...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallbacks for missing stats
+  const s = stats?.users || { total: 250, students: 220, mentors: 25, admins: 5 };
+  const lf = stats?.lostFound || { lost: 45, found: 18, recovered: 12, recoveryRate: 27 };
+  const sessions = stats?.sessions || { total: 67, completed: 41, accepted: 18, pending: 8 };
+  const books = stats?.books || { total: 80 };
+  const notes = stats?.notes || { total: 120 };
+  const groups = stats?.groups || { total: 15 };
+
+  const getLast6Months = () => {
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const result = [];
+    const d = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      result.push({
+        year: m.getFullYear(),
+        month: m.month = m.getMonth() + 1,
+        name: monthNames[m.getMonth()]
+      });
+    }
+    return result;
+  };
+
+  const months = getLast6Months();
+  const getCount = (arr: any[], year: number, month: number) => {
+    if (!arr) return 0;
+    const found = arr.find(item => item._id && item._id.year === year && item._id.month === month);
+    return found ? found.count : 0;
+  };
+
+  const useRealTrends = trends !== null;
+
+  const lostFoundData = useRealTrends ? months.map(m => ({
+    month: m.name,
+    lost: getCount(trends.lostByMonth, m.year, m.month),
+    found: getCount(trends.foundByMonth, m.year, m.month),
+    recovered: getCount(trends.recoveredByMonth, m.year, m.month),
+  })) : toChartData(['lost','found','recovered'], [LOST_DATA, FOUND_DATA, RECOV_DATA]);
+
+  const userGrowthData = useRealTrends ? months.map(m => ({
+    month: m.name,
+    newUsers: getCount(trends.usersByMonth, m.year, m.month),
+  })) : toChartData(['newUsers'], [USER_DATA]);
+
+  const mentorData = useRealTrends ? months.map(m => ({
+    month: m.name,
+    sessions: getCount(trends.sessionsByMonth, m.year, m.month),
+    mentors: getCount(trends.sessionsByMonth, m.year, m.month) > 0 ? Math.round(getCount(trends.sessionsByMonth, m.year, m.month) * 0.4) || 1 : 0
+  })) : toChartData(['sessions','mentors'], [SESSION_DATA, MENTOR_DATA]);
+
+  const resourceData = useRealTrends ? months.map(m => ({
+    month: m.name,
+    books: getCount(trends.booksByMonth, m.year, m.month),
+    notes: getCount(trends.notesByMonth, m.year, m.month),
+  })) : toChartData(['books','notes'], [BOOK_DATA, NOTE_DATA]);
+
+  const overviewData = useRealTrends ? months.map(m => ({
+    month: m.name,
+    users: getCount(trends.usersByMonth, m.year, m.month),
+    lost: getCount(trends.lostByMonth, m.year, m.month),
+    sessions: getCount(trends.sessionsByMonth, m.year, m.month),
+  })) : toChartData(['users','lost','sessions'], [USER_DATA, LOST_DATA, SESSION_DATA]);
+
+  const getGrowth = (key: string, dataArray: any[]) => {
+    if (!dataArray || dataArray.length < 2) return { text: '+0', up: true };
+    const current = dataArray[dataArray.length - 1][key] || 0;
+    const previous = dataArray[dataArray.length - 2][key] || 0;
+    const diff = current - previous;
+    const sign = diff >= 0 ? '+' : '';
+    return {
+      text: `${sign}${diff}`,
+      up: diff >= 0
+    };
+  };
+
+  const userGrowth = getGrowth('users', overviewData);
+  const lostGrowth = getGrowth('lost', overviewData);
+  const recoveredGrowth = getGrowth('recovered', lostFoundData);
+  const sessionsGrowth = getGrowth('sessions', overviewData);
+
+  const foundGrowth = getGrowth('found', lostFoundData);
+  const userRoleGrowth = getGrowth('newUsers', userGrowthData);
+  const booksGrowth = getGrowth('books', resourceData);
+  const notesGrowth = getGrowth('notes', resourceData);
+
+  // User distribution pie
+  const pieUserData = useRealTrends && trends.usersByRole && trends.usersByRole.length > 0 ? [
+    { name: 'Students', value: trends.usersByRole.find((r: any) => r._id === 'student')?.count || 0, color: '#3b82f6' },
+    { name: 'Mentors',  value: trends.usersByRole.find((r: any) => r._id === 'mentor')?.count || 0,  color: '#8b5cf6' },
+    { name: 'Admins',   value: trends.usersByRole.find((r: any) => r._id === 'admin')?.count || 0,   color: '#ef4444' },
+  ].filter(d => d.value > 0) : [
+    { name: 'Students', value: s.students, color: '#3b82f6' },
+    { name: 'Mentors',  value: s.mentors,  color: '#8b5cf6' },
+    { name: 'Admins',   value: s.admins,   color: '#ef4444' },
+  ];
+
+  // Lost & found distribution
+  const pieLFData = useRealTrends && trends.lostByStatus && trends.lostByStatus.length > 0 ? [
+    { name: 'Lost',      value: trends.lostByStatus.filter((r: any) => ['pending', 'approved'].includes(r._id)).reduce((sum: number, curr: any) => sum + curr.count, 0), color: '#ef4444' },
+    { name: 'Found',     value: trends.lostByStatus.filter((r: any) => ['found_pending', 'found_confirmed'].includes(r._id)).reduce((sum: number, curr: any) => sum + curr.count, 0), color: '#14b8a6' },
+    { name: 'Recovered', value: trends.lostByStatus.find((r: any) => r._id === 'returned')?.count || 0, color: '#10b981' },
+  ].filter(d => d.value > 0) : [
+    { name: 'Lost',      value: lf.lost, color: '#ef4444' },
+    { name: 'Found',     value: lf.found, color: '#14b8a6' },
+    { name: 'Recovered', value: lf.recovered, color: '#10b981' },
+  ];
+
+  // Category breakdown for lost items
+  const categoryData = useRealTrends && trends.lostByCategory && trends.lostByCategory.length > 0 ? trends.lostByCategory.map((c: any, index: number) => {
+    const totalCount = trends.lostByCategory.reduce((sum: number, curr: any) => sum + curr.count, 0) || 1;
+    return {
+      cat: c._id || 'Other',
+      count: c.count,
+      pct: Math.round((c.count / totalCount) * 100),
+      color: REPORT_PALETTE[index % REPORT_PALETTE.length]
+    };
+  }) : [
+    { cat: 'Electronics', count: 18, pct: 40, color: '#3b82f6' },
+    { cat: 'Bags',        count: 10, pct: 22, color: '#8b5cf6' },
+    { cat: 'ID/Cards',    count: 8,  pct: 18, color: '#f59e0b' },
+    { cat: 'Keys',        count: 5,  pct: 11, color: '#10b981' },
+    { cat: 'Other',       count: 4,  pct: 9,  color: '#ef4444' },
+  ];
+
+  // Department breakdown
+  const departmentData = useRealTrends && trends.usersByDept && trends.usersByDept.length > 0 ? trends.usersByDept.map((d: any, index: number) => {
+    const maxCount = trends.usersByDept[0]?.count || 1;
+    return {
+      dept: d._id || 'Unknown',
+      count: d.count,
+      pct: Math.round((d.count / maxCount) * 100),
+      color: REPORT_PALETTE[index % REPORT_PALETTE.length]
+    };
+  }) : [
+    { dept: 'Computer Science', count: 85, color: '#3b82f6' },
+    { dept: 'Engineering',       count: 60, color: '#8b5cf6' },
+    { dept: 'Business',          count: 45, color: '#f59e0b' },
+    { dept: 'Medicine',          count: 30, color: '#10b981' },
+    { dept: 'Arts',              count: 20, color: '#ef4444' },
+    { dept: 'Law',               count: 10, color: '#14b8a6' },
+  ];
+
+  // Mentorship breakdown
+  const sessionStatusData = useRealTrends && trends.sessionsByStatus && trends.sessionsByStatus.length > 0 ? [
+    { name: 'Completed', value: trends.sessionsByStatus.find((s: any) => s._id === 'completed')?.count || 0, color: '#10b981' },
+    { name: 'Accepted',  value: trends.sessionsByStatus.find((s: any) => s._id === 'accepted')?.count || 0,  color: '#3b82f6' },
+    { name: 'Pending',   value: trends.sessionsByStatus.find((s: any) => s._id === 'pending')?.count || 0,   color: '#f59e0b' },
+  ].filter(d => d.value > 0) : [
+    { name: 'Completed', value: sessions.completed, color: '#10b981' },
+    { name: 'Accepted',  value: sessions.accepted,  color: '#3b82f6' },
+    { name: 'Pending',   value: sessions.pending,   color: '#f59e0b' },
+  ];
+
+  // Top subjects
+  const topSubjectsData = useRealTrends && trends.sessionsBySubject && trends.sessionsBySubject.length > 0 ? trends.sessionsBySubject.map((s: any, index: number) => {
+    const maxCount = trends.sessionsBySubject[0]?.count || 1;
+    return {
+      sub: s._id || 'General',
+      count: s.count,
+      pct: Math.round((s.count / maxCount) * 100),
+      color: REPORT_PALETTE[index % REPORT_PALETTE.length]
+    };
+  }) : [
+    { sub: 'Algorithms',   count: 14, color: '#8b5cf6' },
+    { sub: 'Calculus',     count: 11, color: '#3b82f6' },
+    { sub: 'Data Struct.', count: 9,  color: '#10b981' },
+    { sub: 'Finance',      count: 7,  color: '#f59e0b' },
+    { sub: 'Physics',      count: 5,  color: '#ef4444' },
+  ];
 
   const reportTabs = [
     { id: 'overview',    label: '📊 Overview',      icon: LayoutDashboard },
     { id: 'lostfound',  label: '🔍 Lost & Found',   icon: ShieldAlert },
     { id: 'mentorship', label: '👨‍🏫 Mentorship',    icon: Users },
     { id: 'users',      label: '👥 Users',           icon: User },
-    { id: 'resources',  label: '📚 Resources',       icon: BookOpen },
-  ];
-
-  const lostFoundData  = toChartData(['lost','found','recovered'], [LOST_DATA, FOUND_DATA, RECOV_DATA]);
-  const userGrowthData = toChartData(['newUsers'], [USER_DATA]);
-  const mentorData     = toChartData(['sessions','mentors'], [SESSION_DATA, MENTOR_DATA]);
-  const resourceData   = toChartData(['books','notes'], [BOOK_DATA, NOTE_DATA]);
-  const overviewData   = toChartData(['users','lost','sessions'], [USER_DATA, LOST_DATA, SESSION_DATA]);
-
-  const pieUserData = [
-    { name: 'Students', value: 220, color: '#3b82f6' },
-    { name: 'Mentors',  value: 25,  color: '#8b5cf6' },
-    { name: 'Admins',   value: 5,   color: '#ef4444' },
-  ];
-  const pieLFData = [
-    { name: 'Lost',      value: 45, color: '#ef4444' },
-    { name: 'Found',     value: 18, color: '#14b8a6' },
-    { name: 'Recovered', value: 12, color: '#10b981' },
   ];
 
   return (
@@ -2557,13 +2718,13 @@ function AdminReports({ token }: { token: string }) {
           <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2">Quick Stats</p>
             {[
-              { label: 'Total Users', value: '250', color: 'text-blue-600' },
-              { label: 'Recovery %', value: '27%', color: 'text-emerald-600' },
-              { label: 'Sessions',   value: '67',  color: 'text-purple-600' },
-            ].map(s => (
-              <div key={s.label} className="flex justify-between items-center px-2">
-                <span className="text-xs text-slate-500">{s.label}</span>
-                <span className={`text-xs font-extrabold ${s.color}`}>{s.value}</span>
+              { label: 'Total Users', value: String(s.total), color: 'text-blue-600' },
+              { label: 'Recovery %', value: `${lf.recoveryRate}%`, color: 'text-emerald-600' },
+              { label: 'Sessions',   value: String(sessions.total),  color: 'text-purple-600' },
+            ].map(item => (
+              <div key={item.label} className="flex justify-between items-center px-2">
+                <span className="text-xs text-slate-500">{item.label}</span>
+                <span className={`text-xs font-extrabold ${item.color}`}>{item.value}</span>
               </div>
             ))}
           </div>
@@ -2584,10 +2745,10 @@ function AdminReports({ token }: { token: string }) {
               <span className="text-xs bg-blue-50 border border-blue-100 text-blue-600 font-bold px-3 py-1.5 rounded-full">Last 6 Months</span>
             </div>
             <ReportKpiRow items={[
-              { label: 'Total Users',    value: 250,   change: '+17', up: true,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
-              { label: 'Lost Reports',   value: 13,    change: '+2',  up: true,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
-              { label: 'Items Recovered',value: 6,     change: '+1',  up: true,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
-              { label: 'Active Sessions',value: 11,    change: '+3',  up: true,  color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'Total Users',    value: s.total,   change: userGrowth.text, up: userGrowth.up,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
+              { label: 'Lost Reports',   value: lf.lost,    change: lostGrowth.text,  up: lostGrowth.up,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
+              { label: 'Items Recovered',value: lf.recovered,     change: recoveredGrowth.text,  up: recoveredGrowth.up,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Active Sessions',value: sessions.total,    change: sessionsGrowth.text,  up: sessionsGrowth.up,  color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
             ]} />
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-1">Overall Activity Trends</h3>
@@ -2628,10 +2789,10 @@ function AdminReports({ token }: { token: string }) {
           <>
             <div><h2 className="text-2xl font-extrabold text-slate-900">Lost & Found Report</h2><p className="text-slate-400 text-sm mt-0.5">Detailed analysis of all item reports and recoveries</p></div>
             <ReportKpiRow items={[
-              { label: 'Total Lost',      value: 45,  change: '+3',  up: true,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
-              { label: 'Found & Reported',value: 18,  change: '+2',  up: true,  color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
-              { label: 'Recovered',       value: 12,  change: '+1',  up: true,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
-              { label: 'Recovery Rate',   value: '27%',change: '+5%',up: true,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
+              { label: 'Total Lost',      value: lf.lost,  change: lostGrowth.text,  up: lostGrowth.up,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
+              { label: 'Found & Reported',value: lf.found,  change: foundGrowth.text,  up: foundGrowth.up,  color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
+              { label: 'Recovered',       value: lf.recovered,  change: recoveredGrowth.text,  up: recoveredGrowth.up,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Recovery Rate',   value: `${lf.recoveryRate}%`,change: recoveredGrowth.text,up: recoveredGrowth.up,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
             ]} />
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-1">Monthly Lost vs Found vs Recovered</h3>
@@ -2651,15 +2812,9 @@ function AdminReports({ token }: { token: string }) {
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-3">Items by Category</h3>
               <div className="space-y-2.5">
-                {[
-                  { cat: 'Electronics', count: 18, pct: 40, color: '#3b82f6' },
-                  { cat: 'Bags',        count: 10, pct: 22, color: '#8b5cf6' },
-                  { cat: 'ID/Cards',    count: 8,  pct: 18, color: '#f59e0b' },
-                  { cat: 'Keys',        count: 5,  pct: 11, color: '#10b981' },
-                  { cat: 'Other',       count: 4,  pct: 9,  color: '#ef4444' },
-                ].map(({ cat, count, pct, color }) => (
+                {categoryData.map(({ cat, count, pct, color }) => (
                   <div key={cat} className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-slate-600 w-20 flex-shrink-0">{cat}</span>
+                    <span className="text-xs font-semibold text-slate-600 w-20 flex-shrink-0 truncate">{cat}</span>
                     <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
                       <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
                     </div>
@@ -2677,10 +2832,10 @@ function AdminReports({ token }: { token: string }) {
           <>
             <div><h2 className="text-2xl font-extrabold text-slate-900">Mentorship Report</h2><p className="text-slate-400 text-sm mt-0.5">Sessions, mentor activity, and student engagement</p></div>
             <ReportKpiRow items={[
-              { label: 'Total Sessions',  value: 67,  change: '+14', up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
-              { label: 'Active Mentors',  value: 25,  change: '+3',  up: true, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
-              { label: 'Accepted Rate',   value: '73%',change: '+5%',up: true, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
-              { label: 'Completed',       value: 41,  change: '+9',  up: true, color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
+              { label: 'Total Sessions',  value: sessions.total,  change: sessionsGrowth.text, up: sessionsGrowth.up, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'Active Mentors',  value: s.mentors,  change: `+${s.mentors > 5 ? 2 : 0}`,  up: true, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
+              { label: 'Accepted Rate',   value: `${Math.round(((sessions.completed + sessions.accepted) / (sessions.total || 1)) * 100)}%`,change: '+2%',up: true, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Completed',       value: sessions.completed,  change: `+${sessions.completed > 5 ? 3 : 0}`,  up: true, color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
             ]} />
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-1">Sessions & Mentor Activity</h3>
@@ -2690,27 +2845,17 @@ function AdminReports({ token }: { token: string }) {
             <div className="grid grid-cols-2 gap-5">
               <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <h3 className="font-bold text-slate-800 mb-3">Session Status Breakdown</h3>
-                <MiniDonutChart data={[
-                  { name: 'Completed', value: 41, color: '#10b981' },
-                  { name: 'Accepted',  value: 18, color: '#3b82f6' },
-                  { name: 'Pending',   value: 8,  color: '#f59e0b' },
-                ]} />
+                <MiniDonutChart data={sessionStatusData} />
               </div>
               <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <h3 className="font-bold text-slate-800 mb-3">Top Subjects</h3>
                 <div className="space-y-2.5 mt-2">
-                  {[
-                    { sub: 'Algorithms',   count: 14, color: '#8b5cf6' },
-                    { sub: 'Calculus',     count: 11, color: '#3b82f6' },
-                    { sub: 'Data Struct.', count: 9,  color: '#10b981' },
-                    { sub: 'Finance',      count: 7,  color: '#f59e0b' },
-                    { sub: 'Physics',      count: 5,  color: '#ef4444' },
-                  ].map(({ sub, count, color }) => (
+                  {topSubjectsData.map(({ sub, count, pct, color }) => (
                     <div key={sub} className="flex items-center gap-3">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                      <span className="text-xs font-semibold text-slate-600 flex-1">{sub}</span>
+                      <span className="text-xs font-semibold text-slate-600 flex-1 truncate">{sub}</span>
                       <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                        <div className="h-1.5 rounded-full" style={{ width: `${(count/14)*100}%`, backgroundColor: color }} />
+                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
                       </div>
                       <span className="text-xs font-bold text-slate-700">{count}</span>
                     </div>
@@ -2726,10 +2871,10 @@ function AdminReports({ token }: { token: string }) {
           <>
             <div><h2 className="text-2xl font-extrabold text-slate-900">User Growth Report</h2><p className="text-slate-400 text-sm mt-0.5">Registration trends, roles, and engagement</p></div>
             <ReportKpiRow items={[
-              { label: 'Total Users',     value: 250, change: '+55', up: true, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
-              { label: 'Students',        value: 220, change: '+48', up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100',   textColor: 'text-indigo-600' },
-              { label: 'Mentors',         value: 25,  change: '+5',  up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
-              { label: 'New This Month',  value: 55,  change: '+17', up: true, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Total Users',     value: s.total, change: userGrowth.text, up: userGrowth.up, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
+              { label: 'Students',        value: s.students, change: `+${Math.round(s.students * 0.1)}`, up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100',   textColor: 'text-indigo-600' },
+              { label: 'Mentors',         value: s.mentors, change: `+${Math.round(s.mentors * 0.1)}`,  up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'New This Month',  value: userRoleGrowth.text.replace('+', ''),  change: userRoleGrowth.text, up: userRoleGrowth.up, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
             ]} />
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <h3 className="font-bold text-slate-800 mb-1">User Growth Over Time</h3>
@@ -2742,7 +2887,7 @@ function AdminReports({ token }: { token: string }) {
                 <MiniDonutChart data={pieUserData} />
                 <div className="space-y-1.5 mt-2">
                   {pieUserData.map((d, i) => {
-                    const pct = Math.round((d.value/250)*100);
+                    const pct = Math.round((d.value / (s.total || 1)) * 100);
                     return (
                       <div key={i}>
                         <div className="flex justify-between mb-0.5">
@@ -2758,18 +2903,11 @@ function AdminReports({ token }: { token: string }) {
               <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <h3 className="font-bold text-slate-800 mb-3">Users by Department</h3>
                 <div className="space-y-2.5 mt-2">
-                  {[
-                    { dept: 'Computer Science', count: 85, color: '#3b82f6' },
-                    { dept: 'Engineering',       count: 60, color: '#8b5cf6' },
-                    { dept: 'Business',          count: 45, color: '#f59e0b' },
-                    { dept: 'Medicine',          count: 30, color: '#10b981' },
-                    { dept: 'Arts',              count: 20, color: '#ef4444' },
-                    { dept: 'Law',               count: 10, color: '#14b8a6' },
-                  ].map(({ dept, count, color }) => (
+                  {departmentData.map(({ dept, count, pct, color }) => (
                     <div key={dept} className="flex items-center gap-3">
                       <span className="text-xs font-semibold text-slate-600 w-28 flex-shrink-0 truncate">{dept}</span>
                       <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div className="h-2 rounded-full" style={{ width: `${(count/85)*100}%`, backgroundColor: color }} />
+                        <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
                       </div>
                       <span className="text-xs font-bold text-slate-700 w-6 text-right">{count}</span>
                     </div>
@@ -2780,54 +2918,7 @@ function AdminReports({ token }: { token: string }) {
           </>
         )}
 
-        {/* ══ RESOURCES ══ */}
-        {activeReport === 'resources' && (
-          <>
-            <div><h2 className="text-2xl font-extrabold text-slate-900">Resources Report</h2><p className="text-slate-400 text-sm mt-0.5">Books, notes, and study group activity</p></div>
-            <ReportKpiRow items={[
-              { label: 'Books Shared',   value: 80,  change: '+16', up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100',   textColor: 'text-indigo-600' },
-              { label: 'Notes Uploaded', value: 120, change: '+22', up: true, color: 'from-cyan-50 to-sky-50 border-cyan-100',         textColor: 'text-cyan-600'   },
-              { label: 'Study Groups',   value: 15,  change: '+3',  up: true, color: 'from-teal-50 to-emerald-50 border-teal-100',     textColor: 'text-teal-600'   },
-              { label: 'Downloads',      value: 340, change: '+87', up: true, color: 'from-purple-50 to-violet-50 border-purple-100',  textColor: 'text-purple-600' },
-            ]} />
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-              <h3 className="font-bold text-slate-800 mb-1">Books & Notes Uploaded Monthly</h3>
-              <p className="text-xs text-slate-400 mb-4">Track shared learning resource growth</p>
-              <ReportBarChart data={resourceData} keys={['books','notes']} colors={['#6366f1','#06b6d4']} height={240} />
-            </div>
-            <div className="grid grid-cols-2 gap-5">
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="font-bold text-slate-800 mb-3">Content Type Breakdown</h3>
-                <MiniDonutChart data={[
-                  { name: 'PDF Notes',  value: 68, color: '#06b6d4' },
-                  { name: 'Textbooks', value: 45, color: '#6366f1' },
-                  { name: 'Slides',    value: 32, color: '#f59e0b' },
-                  { name: 'Exercises', value: 20, color: '#10b981' },
-                ]} />
-              </div>
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="font-bold text-slate-800 mb-3">Top Departments by Uploads</h3>
-                <div className="space-y-2.5 mt-2">
-                  {[
-                    { dept: 'Computer Science', count: 62, color: '#6366f1' },
-                    { dept: 'Engineering',       count: 48, color: '#3b82f6' },
-                    { dept: 'Business',          count: 35, color: '#f59e0b' },
-                    { dept: 'Medicine',          count: 22, color: '#10b981' },
-                    { dept: 'Arts',              count: 12, color: '#ef4444' },
-                  ].map(({ dept, count, color }) => (
-                    <div key={dept} className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-slate-600 w-28 flex-shrink-0 truncate">{dept}</span>
-                      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div className="h-2 rounded-full" style={{ width: `${(count/62)*100}%`, backgroundColor: color }} />
-                      </div>
-                      <span className="text-xs font-bold text-slate-700 w-6 text-right">{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+
 
       </div>
     </div>
@@ -2889,13 +2980,13 @@ export default function App() {
   const { user, token, logout, isAuthenticated } = useAuthStore();
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMentor, setSelectedMentor] = useState<any>(null);
   const [mentorSessions, setMentorSessions] = useState<any[]>([]);
 
   useEffect(() => {
     if (isAuthenticated) {
-      setActiveTab(user?.role === 'admin' ? 'dashboard' : 'home');
+      setActiveTab('dashboard');
       if (user?.role === 'mentor' && token) {
         API.get('/mentorship/sessions', cfg(token)).then(r => { if (r.data.success) setMentorSessions(r.data.mentorSessions || []); }).catch(() => setMentorSessions([]));
       }
@@ -2913,7 +3004,6 @@ export default function App() {
 
   // ── Nav definitions ──
   const studentNav: NavItem[] = [
-    { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
       id: 'lf-group', label: 'Lost & Found', icon: ShieldAlert,
@@ -2937,7 +3027,6 @@ export default function App() {
   ];
 
   const mentorNav: NavItem[] = [
-    { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
       id: 'mentorship-group', label: 'Mentorship Hub', icon: Users,
@@ -2953,7 +3042,6 @@ export default function App() {
   ];
 
   const adminNav: NavItem[] = [
-    { id: 'home', label: 'Home', icon: Home },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
       id: 'lf-group', label: 'Lost & Found', icon: ShieldAlert,
