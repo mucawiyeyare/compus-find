@@ -2432,20 +2432,403 @@ function AdminUsers({ token, defaultView = 'list' }: { token: string; defaultVie
   );
 }
 
-// Admin: Reports
-function AdminReports({ token }: { token: string }) {
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => { API.get('/campus/stats').then(r => { if (r.data.success) setStats(r.data); }).catch(() => {}); }, []);
+// Admin: Reports — Full report hub with sidebar tabs and rich charts
+const REPORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun'];
+
+const LOST_DATA   = [8,12,6,15,10,13];
+const FOUND_DATA  = [4,7,3,9,6,8];
+const RECOV_DATA  = [3,5,2,7,5,6];
+const USER_DATA   = [18,24,30,42,38,55];
+const MENTOR_DATA = [4,6,3,9,7,11];
+const BOOK_DATA   = [10,14,8,18,12,16];
+const NOTE_DATA   = [15,20,12,25,18,22];
+const SESSION_DATA= [5,8,4,12,9,14];
+
+const toChartData = (keys: string[], rows: number[][]) =>
+  REPORT_MONTHS.map((month, i) => ({ month, ...Object.fromEntries(keys.map((k, ki) => [k, rows[ki][i]])) }));
+
+const REPORT_PALETTE = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#6366f1','#f97316'];
+
+function ReportAreaChart({ data, keys, colors, height = 200 }: { data: any[]; keys: string[]; colors: string[]; height?: number }) {
   return (
-    <div className="space-y-6">
-      <PageHeader title="Reports & Analytics" subtitle="Platform-wide statistics and engagement metrics." />
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Total Users" value={stats?.stats?.totalUsers || '—'} icon={Users} color="bg-blue-100 text-blue-600" />
-        <StatCard label="Items Recovered" value={stats?.stats?.lostResolved || '—'} icon={CheckCircle} color="bg-emerald-100 text-emerald-600" />
-        <StatCard label="Books Shared" value={stats?.stats?.sharedBooks || '—'} icon={BookOpen} color="bg-indigo-100 text-indigo-600" />
-        <StatCard label="Notes Shared" value={stats?.stats?.notesShared || '—'} icon={FileText} color="bg-purple-100 text-purple-600" />
-        <StatCard label="Study Groups" value={stats?.stats?.studyGroups || '—'} icon={Users} color="bg-teal-100 text-teal-600" />
-        <StatCard label="Sessions" value={stats?.stats?.totalSessions || '—'} icon={Calendar} color="bg-rose-100 text-rose-600" />
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+        <defs>
+          {keys.map((k, i) => (
+            <linearGradient key={k} id={`grad_${k}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={colors[i]} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={colors[i]} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {keys.map((k, i) => (
+          <Area key={k} type="monotone" dataKey={k} stroke={colors[i]} strokeWidth={2.5} fill={`url(#grad_${k})`} name={k.charAt(0).toUpperCase()+k.slice(1)} />
+        ))}
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+function ReportBarChart({ data, keys, colors, height = 200 }: { data: any[]; keys: string[]; colors: string[]; height?: number }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 0 }} barSize={12}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {keys.map((k, i) => <Bar key={k} dataKey={k} fill={colors[i]} radius={[4,4,0,0]} name={k.charAt(0).toUpperCase()+k.slice(1)} />)}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function ReportKpiRow({ items }: { items: { label: string; value: string|number; change: string; up: boolean; color: string; textColor: string }[] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {items.map(({ label, value, change, up, color, textColor }) => (
+        <div key={label} className={`bg-gradient-to-br ${color} border rounded-2xl p-4`}>
+          <p className="text-xs text-slate-500 font-medium mb-1">{label}</p>
+          <p className={`text-3xl font-extrabold ${textColor}`}>{value}</p>
+          <p className={`text-xs font-bold mt-1 ${up ? 'text-emerald-500' : 'text-red-400'}`}>{change} vs last month</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AdminReports({ token }: { token: string }) {
+  const [activeReport, setActiveReport] = useState('overview');
+
+  const reportTabs = [
+    { id: 'overview',    label: '📊 Overview',      icon: LayoutDashboard },
+    { id: 'lostfound',  label: '🔍 Lost & Found',   icon: ShieldAlert },
+    { id: 'mentorship', label: '👨‍🏫 Mentorship',    icon: Users },
+    { id: 'users',      label: '👥 Users',           icon: User },
+    { id: 'resources',  label: '📚 Resources',       icon: BookOpen },
+  ];
+
+  const lostFoundData  = toChartData(['lost','found','recovered'], [LOST_DATA, FOUND_DATA, RECOV_DATA]);
+  const userGrowthData = toChartData(['newUsers'], [USER_DATA]);
+  const mentorData     = toChartData(['sessions','mentors'], [SESSION_DATA, MENTOR_DATA]);
+  const resourceData   = toChartData(['books','notes'], [BOOK_DATA, NOTE_DATA]);
+  const overviewData   = toChartData(['users','lost','sessions'], [USER_DATA, LOST_DATA, SESSION_DATA]);
+
+  const pieUserData = [
+    { name: 'Students', value: 220, color: '#3b82f6' },
+    { name: 'Mentors',  value: 25,  color: '#8b5cf6' },
+    { name: 'Admins',   value: 5,   color: '#ef4444' },
+  ];
+  const pieLFData = [
+    { name: 'Lost',      value: 45, color: '#ef4444' },
+    { name: 'Found',     value: 18, color: '#14b8a6' },
+    { name: 'Recovered', value: 12, color: '#10b981' },
+  ];
+
+  return (
+    <div className="flex gap-6 min-h-[80vh]">
+      {/* ── Report Sidebar ── */}
+      <aside className="w-52 flex-shrink-0">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sticky top-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2 mb-3">Report Sections</p>
+          <nav className="space-y-1">
+            {reportTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveReport(tab.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2.5 ${
+                  activeReport === tab.id
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <tab.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+          {/* Mini summary */}
+          <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-2">Quick Stats</p>
+            {[
+              { label: 'Total Users', value: '250', color: 'text-blue-600' },
+              { label: 'Recovery %', value: '27%', color: 'text-emerald-600' },
+              { label: 'Sessions',   value: '67',  color: 'text-purple-600' },
+            ].map(s => (
+              <div key={s.label} className="flex justify-between items-center px-2">
+                <span className="text-xs text-slate-500">{s.label}</span>
+                <span className={`text-xs font-extrabold ${s.color}`}>{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Report Content ── */}
+      <div className="flex-1 space-y-6 min-w-0">
+
+        {/* ══ OVERVIEW ══ */}
+        {activeReport === 'overview' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900">Platform Overview</h2>
+                <p className="text-slate-400 text-sm mt-0.5">All-in-one view of campus activity</p>
+              </div>
+              <span className="text-xs bg-blue-50 border border-blue-100 text-blue-600 font-bold px-3 py-1.5 rounded-full">Last 6 Months</span>
+            </div>
+            <ReportKpiRow items={[
+              { label: 'Total Users',    value: 250,   change: '+17', up: true,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
+              { label: 'Lost Reports',   value: 13,    change: '+2',  up: true,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
+              { label: 'Items Recovered',value: 6,     change: '+1',  up: true,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Active Sessions',value: 11,    change: '+3',  up: true,  color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+            ]} />
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-1">Overall Activity Trends</h3>
+              <p className="text-xs text-slate-400 mb-4">Users, Lost Reports & Mentor Sessions over 6 months</p>
+              <ReportAreaChart data={overviewData} keys={['users','lost','sessions']} colors={['#3b82f6','#ef4444','#8b5cf6']} height={240} />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-1">User Distribution</h3>
+                <MiniDonutChart data={pieUserData} />
+                <div className="space-y-1.5 mt-2">
+                  {pieUserData.map((d, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} /><span className="text-xs text-slate-600 font-medium">{d.name}</span></div>
+                      <span className="text-xs font-bold text-slate-800">{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-1">Lost & Found Summary</h3>
+                <MiniDonutChart data={pieLFData} />
+                <div className="space-y-1.5 mt-2">
+                  {pieLFData.map((d, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} /><span className="text-xs text-slate-600 font-medium">{d.name}</span></div>
+                      <span className="text-xs font-bold text-slate-800">{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══ LOST & FOUND ══ */}
+        {activeReport === 'lostfound' && (
+          <>
+            <div><h2 className="text-2xl font-extrabold text-slate-900">Lost & Found Report</h2><p className="text-slate-400 text-sm mt-0.5">Detailed analysis of all item reports and recoveries</p></div>
+            <ReportKpiRow items={[
+              { label: 'Total Lost',      value: 45,  change: '+3',  up: true,  color: 'from-red-50 to-rose-50 border-red-100',         textColor: 'text-red-600'    },
+              { label: 'Found & Reported',value: 18,  change: '+2',  up: true,  color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
+              { label: 'Recovered',       value: 12,  change: '+1',  up: true,  color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Recovery Rate',   value: '27%',change: '+5%',up: true,  color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
+            ]} />
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-1">Monthly Lost vs Found vs Recovered</h3>
+              <p className="text-xs text-slate-400 mb-4">Track item lifecycle over time</p>
+              <ReportBarChart data={lostFoundData} keys={['lost','found','recovered']} colors={['#ef4444','#14b8a6','#10b981']} height={240} />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">Lost Items Trend</h3>
+                <ReportAreaChart data={lostFoundData} keys={['lost']} colors={['#ef4444']} height={160} />
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">Recovery Trend</h3>
+                <ReportAreaChart data={lostFoundData} keys={['recovered']} colors={['#10b981']} height={160} />
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-3">Items by Category</h3>
+              <div className="space-y-2.5">
+                {[
+                  { cat: 'Electronics', count: 18, pct: 40, color: '#3b82f6' },
+                  { cat: 'Bags',        count: 10, pct: 22, color: '#8b5cf6' },
+                  { cat: 'ID/Cards',    count: 8,  pct: 18, color: '#f59e0b' },
+                  { cat: 'Keys',        count: 5,  pct: 11, color: '#10b981' },
+                  { cat: 'Other',       count: 4,  pct: 9,  color: '#ef4444' },
+                ].map(({ cat, count, pct, color }) => (
+                  <div key={cat} className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-slate-600 w-20 flex-shrink-0">{cat}</span>
+                    <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+                    </div>
+                    <span className="text-xs font-bold text-slate-700 w-8 text-right">{count}</span>
+                    <span className="text-[10px] text-slate-400 w-8">{pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══ MENTORSHIP ══ */}
+        {activeReport === 'mentorship' && (
+          <>
+            <div><h2 className="text-2xl font-extrabold text-slate-900">Mentorship Report</h2><p className="text-slate-400 text-sm mt-0.5">Sessions, mentor activity, and student engagement</p></div>
+            <ReportKpiRow items={[
+              { label: 'Total Sessions',  value: 67,  change: '+14', up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'Active Mentors',  value: 25,  change: '+3',  up: true, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-600'   },
+              { label: 'Accepted Rate',   value: '73%',change: '+5%',up: true, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+              { label: 'Completed',       value: 41,  change: '+9',  up: true, color: 'from-teal-50 to-cyan-50 border-teal-100',       textColor: 'text-teal-600'   },
+            ]} />
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-1">Sessions & Mentor Activity</h3>
+              <p className="text-xs text-slate-400 mb-4">Monthly mentorship sessions vs active mentors</p>
+              <ReportAreaChart data={mentorData} keys={['sessions','mentors']} colors={['#8b5cf6','#3b82f6']} height={240} />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Session Status Breakdown</h3>
+                <MiniDonutChart data={[
+                  { name: 'Completed', value: 41, color: '#10b981' },
+                  { name: 'Accepted',  value: 18, color: '#3b82f6' },
+                  { name: 'Pending',   value: 8,  color: '#f59e0b' },
+                ]} />
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Top Subjects</h3>
+                <div className="space-y-2.5 mt-2">
+                  {[
+                    { sub: 'Algorithms',   count: 14, color: '#8b5cf6' },
+                    { sub: 'Calculus',     count: 11, color: '#3b82f6' },
+                    { sub: 'Data Struct.', count: 9,  color: '#10b981' },
+                    { sub: 'Finance',      count: 7,  color: '#f59e0b' },
+                    { sub: 'Physics',      count: 5,  color: '#ef4444' },
+                  ].map(({ sub, count, color }) => (
+                    <div key={sub} className="flex items-center gap-3">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                      <span className="text-xs font-semibold text-slate-600 flex-1">{sub}</span>
+                      <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="h-1.5 rounded-full" style={{ width: `${(count/14)*100}%`, backgroundColor: color }} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-700">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══ USERS ══ */}
+        {activeReport === 'users' && (
+          <>
+            <div><h2 className="text-2xl font-extrabold text-slate-900">User Growth Report</h2><p className="text-slate-400 text-sm mt-0.5">Registration trends, roles, and engagement</p></div>
+            <ReportKpiRow items={[
+              { label: 'Total Users',     value: 250, change: '+55', up: true, color: 'from-blue-50 to-indigo-50 border-blue-100',     textColor: 'text-blue-700'   },
+              { label: 'Students',        value: 220, change: '+48', up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100',   textColor: 'text-indigo-600' },
+              { label: 'Mentors',         value: 25,  change: '+5',  up: true, color: 'from-purple-50 to-violet-50 border-purple-100', textColor: 'text-purple-600' },
+              { label: 'New This Month',  value: 55,  change: '+17', up: true, color: 'from-emerald-50 to-green-50 border-emerald-100',textColor: 'text-emerald-600'},
+            ]} />
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-1">User Growth Over Time</h3>
+              <p className="text-xs text-slate-400 mb-4">New registrations per month</p>
+              <ReportAreaChart data={userGrowthData} keys={['newUsers']} colors={['#6366f1']} height={240} />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Users by Role</h3>
+                <MiniDonutChart data={pieUserData} />
+                <div className="space-y-1.5 mt-2">
+                  {pieUserData.map((d, i) => {
+                    const pct = Math.round((d.value/250)*100);
+                    return (
+                      <div key={i}>
+                        <div className="flex justify-between mb-0.5">
+                          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} /><span className="text-xs text-slate-600 font-medium">{d.name}</span></div>
+                          <span className="text-xs font-bold text-slate-800">{d.value}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5"><div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: d.color }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Users by Department</h3>
+                <div className="space-y-2.5 mt-2">
+                  {[
+                    { dept: 'Computer Science', count: 85, color: '#3b82f6' },
+                    { dept: 'Engineering',       count: 60, color: '#8b5cf6' },
+                    { dept: 'Business',          count: 45, color: '#f59e0b' },
+                    { dept: 'Medicine',          count: 30, color: '#10b981' },
+                    { dept: 'Arts',              count: 20, color: '#ef4444' },
+                    { dept: 'Law',               count: 10, color: '#14b8a6' },
+                  ].map(({ dept, count, color }) => (
+                    <div key={dept} className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-slate-600 w-28 flex-shrink-0 truncate">{dept}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-2 rounded-full" style={{ width: `${(count/85)*100}%`, backgroundColor: color }} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 w-6 text-right">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ══ RESOURCES ══ */}
+        {activeReport === 'resources' && (
+          <>
+            <div><h2 className="text-2xl font-extrabold text-slate-900">Resources Report</h2><p className="text-slate-400 text-sm mt-0.5">Books, notes, and study group activity</p></div>
+            <ReportKpiRow items={[
+              { label: 'Books Shared',   value: 80,  change: '+16', up: true, color: 'from-indigo-50 to-blue-50 border-indigo-100',   textColor: 'text-indigo-600' },
+              { label: 'Notes Uploaded', value: 120, change: '+22', up: true, color: 'from-cyan-50 to-sky-50 border-cyan-100',         textColor: 'text-cyan-600'   },
+              { label: 'Study Groups',   value: 15,  change: '+3',  up: true, color: 'from-teal-50 to-emerald-50 border-teal-100',     textColor: 'text-teal-600'   },
+              { label: 'Downloads',      value: 340, change: '+87', up: true, color: 'from-purple-50 to-violet-50 border-purple-100',  textColor: 'text-purple-600' },
+            ]} />
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-800 mb-1">Books & Notes Uploaded Monthly</h3>
+              <p className="text-xs text-slate-400 mb-4">Track shared learning resource growth</p>
+              <ReportBarChart data={resourceData} keys={['books','notes']} colors={['#6366f1','#06b6d4']} height={240} />
+            </div>
+            <div className="grid grid-cols-2 gap-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Content Type Breakdown</h3>
+                <MiniDonutChart data={[
+                  { name: 'PDF Notes',  value: 68, color: '#06b6d4' },
+                  { name: 'Textbooks', value: 45, color: '#6366f1' },
+                  { name: 'Slides',    value: 32, color: '#f59e0b' },
+                  { name: 'Exercises', value: 20, color: '#10b981' },
+                ]} />
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Top Departments by Uploads</h3>
+                <div className="space-y-2.5 mt-2">
+                  {[
+                    { dept: 'Computer Science', count: 62, color: '#6366f1' },
+                    { dept: 'Engineering',       count: 48, color: '#3b82f6' },
+                    { dept: 'Business',          count: 35, color: '#f59e0b' },
+                    { dept: 'Medicine',          count: 22, color: '#10b981' },
+                    { dept: 'Arts',              count: 12, color: '#ef4444' },
+                  ].map(({ dept, count, color }) => (
+                    <div key={dept} className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-slate-600 w-28 flex-shrink-0 truncate">{dept}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-2 rounded-full" style={{ width: `${(count/62)*100}%`, backgroundColor: color }} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 w-6 text-right">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
