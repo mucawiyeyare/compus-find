@@ -10,8 +10,34 @@ import {
   User, Settings, Plus, CheckCircle, XCircle, Clock, AlertCircle,
   FileText, MapPin, Calendar, Sparkles, ShieldAlert, X, Check,
   Trash2, Edit2, Eye, Home, BookOpen, Award, Filter, RefreshCw,
-  ChevronRight, Phone, Mail, MoreVertical, MessageCircle, ExternalLink
+  ChevronRight, Phone, Mail, MoreVertical, MessageCircle, ExternalLink,
+  Moon, Sun
 } from 'lucide-react';
+
+// ─── Dark Mode Hook ────────────────────────────────────────────────────────────
+function useDarkMode(): [boolean, () => void] {
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('theme');
+      if (stored) return stored === 'dark';
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
+  const toggle = useCallback(() => setIsDark(prev => !prev), []);
+  return [isDark, toggle];
+}
 
 // ─── API ───────────────────────────────────────────────────────────────────────
 const API = axios.create({ baseURL: '/api' });
@@ -35,9 +61,9 @@ const StatusBadge = ({ status }: { status: string }) => {
   };
   const labels: Record<string, string> = {
     pending: 'Pending Approval', approved: 'Approved', rejected: 'Rejected',
-    found: 'Found', found_pending: 'Found – Pending', completed: 'Completed',
+    found: 'Found', found_pending: 'Found – Saved', completed: 'Completed',
     cancelled: 'Cancelled', accepted: 'Accepted', declined: 'Declined',
-    lost: 'Lost', returned: 'Returned',
+    lost: 'Published', returned: 'Returned',
   };
   return (
     <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${map[status] || 'bg-slate-100 text-slate-500'}`}>
@@ -257,22 +283,37 @@ const CampusIllustration = () => (
 
 // ─── LANDING PAGE ──────────────────────────────────────────────────────────────
 
-function LandingPage({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) {
+function LandingPage({ onLogin, onRegister, isDark, onToggleDark }: {
+  onLogin: () => void; onRegister: () => void; isDark: boolean; onToggleDark: () => void;
+}) {
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Shorthand
+  const D = isDark;
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-      {/* Navbar */}
-      <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${D ? 'bg-slate-900 text-slate-100' : 'bg-white text-slate-900'}`}>
+
+      {/* ── Navbar ─────────────────────────────────────────────── */}
+      <header className={`border-b backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 ${
+        D ? 'border-white/5 bg-slate-950/80' : 'border-slate-200 bg-white/90'
+      }`}>
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+
+          {/* Logo */}
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => scrollTo('home')}>
-            <span className="p-2 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-xl text-white shadow-lg shadow-blue-500/20"><Sparkles className="w-5 h-5" /></span>
-            <span className="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">Smart Campus Connect</span>
+            <span className="p-2 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-xl text-white shadow-lg shadow-blue-500/20">
+              <Sparkles className="w-5 h-5" />
+            </span>
+            <span className={`font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r ${
+              D ? 'from-white to-slate-300' : 'from-slate-900 to-slate-500'
+            }`}>Smart Campus Connect</span>
           </div>
-          
+
+          {/* Nav links */}
           <nav className="hidden md:flex items-center gap-6">
             {[
               { id: 'home', label: 'Home' },
@@ -281,84 +322,155 @@ function LandingPage({ onLogin, onRegister }: { onLogin: () => void; onRegister:
               { id: 'mentorship', label: 'Mentorship' },
               { id: 'about', label: 'About' },
             ].map(item => (
-              <button key={item.id} onClick={() => scrollTo(item.id)} className="text-sm font-semibold text-slate-400 hover:text-white transition-colors py-1.5">{item.label}</button>
+              <button
+                key={item.id}
+                onClick={() => scrollTo(item.id)}
+                className={`text-sm font-semibold transition-colors py-1.5 ${
+                  D ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >{item.label}</button>
             ))}
           </nav>
 
+          {/* Actions */}
           <div className="flex items-center gap-3">
-            <button onClick={onLogin} className="text-sm text-slate-300 hover:text-white font-semibold px-4 py-2 rounded-xl transition-colors">Sign In</button>
-            <button onClick={onRegister} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/25">Get Started</button>
+            <button
+              onClick={onLogin}
+              className={`text-sm font-semibold px-4 py-2 rounded-xl transition-colors ${
+                D ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >Sign In</button>
+            <button
+              onClick={onRegister}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/25"
+            >Get Started</button>
+            {/* Theme Toggle */}
+            <button
+              onClick={onToggleDark}
+              title={D ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              className="theme-toggle"
+              aria-label="Toggle dark mode"
+            >
+              {D ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* ── Hero ───────────────────────────────────────────────── */}
       <section id="home" className="max-w-6xl mx-auto px-6 pt-20 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center min-h-[calc(100vh-4rem)]">
         <div className="space-y-6 text-left">
-          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 font-semibold tracking-wide uppercase">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Connect · Learn · Find · Grow
+          <span className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-semibold tracking-wide uppercase ${
+            D
+              ? 'bg-blue-500/10 border-blue-500/20 text-blue-300'
+              : 'bg-blue-50 border-blue-200 text-blue-600'
+          }`}>
+            <Sparkles className="w-3.5 h-3.5" /> Connect · Learn · Find · Grow
           </span>
-          <h1 className="text-5xl lg:text-6xl font-black tracking-tight leading-none text-white">
+
+          <h1 className={`text-5xl lg:text-6xl font-black tracking-tight leading-none ${
+            D ? 'text-white' : 'text-slate-900'
+          }`}>
             Your Smart Campus,<br />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">All In One Place</span>
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">
+              All In One Place
+            </span>
           </h1>
-          <p className="text-slate-400 text-base lg:text-lg leading-relaxed max-w-xl">
-            Report and locate lost items with admin-approved safety, connect with verified academic department mentors, share learning resources, and connect with your university community.
+
+          <p className={`text-base lg:text-lg leading-relaxed max-w-xl ${
+            D ? 'text-slate-400' : 'text-slate-500'
+          }`}>
+            Report and locate lost items instantly — no admin approval needed. Connect with verified academic mentors, share learning resources, and engage with your university community.
           </p>
+
           <div className="flex flex-wrap gap-4 pt-2">
-            <button onClick={onRegister} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold px-8 py-3.5 rounded-xl transition-all shadow-xl shadow-blue-500/20">Get Started</button>
-            <button onClick={() => scrollTo('lostfound')} className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold px-8 py-3.5 rounded-xl transition-all flex items-center gap-2">Explore Items <ChevronRight className="w-4 h-4" /></button>
+            <button
+              onClick={onRegister}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold px-8 py-3.5 rounded-xl transition-all shadow-xl shadow-blue-500/20"
+            >Get Started</button>
+            <button
+              onClick={() => scrollTo('lostfound')}
+              className={`border font-bold px-8 py-3.5 rounded-xl transition-all flex items-center gap-2 ${
+                D
+                  ? 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
+                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800'
+              }`}
+            >Explore Items <ChevronRight className="w-4 h-4" /></button>
           </div>
         </div>
+
         <div className="flex justify-center">
           <CampusIllustration />
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="bg-slate-950 border-y border-white/5 py-24">
+      {/* ── Features ───────────────────────────────────────────── */}
+      <section id="features" className={`border-y py-24 transition-colors duration-300 ${
+        D ? 'bg-slate-950 border-white/5' : 'bg-slate-50 border-slate-200'
+      }`}>
         <div className="max-w-6xl mx-auto px-6 text-center space-y-16">
           <div className="space-y-4">
-            <h2 className="text-3xl font-black text-white">Why Use Smart Campus Connect?</h2>
-            <p className="text-slate-400 text-sm max-w-lg mx-auto">Discover the core features designed to make your daily university life seamless and connected.</p>
+            <h2 className={`text-3xl font-black ${ D ? 'text-white' : 'text-slate-900'}`}>
+              Why Use Smart Campus Connect?
+            </h2>
+            <p className={`text-sm max-w-lg mx-auto ${ D ? 'text-slate-400' : 'text-slate-500'}`}>
+              Discover the core features designed to make your daily university life seamless and connected.
+            </p>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { icon: ShieldAlert, title: '🔍 Lost & Found', desc: 'Verify and report lost or found items on campus safely and quickly through admin reviews.', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+              { icon: ShieldAlert, title: '🔍 Lost & Found', desc: 'Report lost items instantly — they go live on the public board immediately. Found something? Submit a report and it saves privately to your history.', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
               { icon: Users, title: '👨‍🏫 Mentorship Hub', desc: 'Find and request 1-on-1 tutoring sessions from verified student or faculty mentors in your major.', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
               { icon: BookOpen, title: '📚 Shared Resources', desc: 'Share lecture notebooks, textbooks, study guide resources with other peers in your department.', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
               { icon: Award, title: '🏆 Gamified Badges', desc: 'Earn points and helper badges by returning lost items, uploading guides, or completing mentor requests.', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
             ].map(({ icon: Icon, title, desc, color }, i) => (
-              <div key={i} className="bg-slate-900/50 border border-white/5 rounded-2xl p-6 hover:bg-slate-900 hover:border-blue-500/20 transition-all text-left group">
-                <span className={`inline-flex p-3 rounded-xl border ${color} mb-4 group-hover:scale-110 transition-transform`}><Icon className="w-5 h-5" /></span>
-                <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
+              <div key={i} className={`border rounded-2xl p-6 transition-all text-left group ${
+                D
+                  ? 'bg-slate-900/50 border-white/5 hover:bg-slate-900 hover:border-blue-500/20'
+                  : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300'
+              }`}>
+                <span className={`inline-flex p-3 rounded-xl border ${color} mb-4 group-hover:scale-110 transition-transform`}>
+                  <Icon className="w-5 h-5" />
+                </span>
+                <h3 className={`text-lg font-bold mb-2 ${ D ? 'text-white' : 'text-slate-900'}`}>{title}</h3>
+                <p className={`text-xs leading-relaxed ${ D ? 'text-slate-400' : 'text-slate-500'}`}>{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Lost & Found Section */}
-      <section id="lostfound" className="bg-slate-50 text-slate-800 py-24 border-b border-slate-200">
+      {/* ── Lost & Found ───────────────────────────────────────── */}
+      <section id="lostfound" className={`py-24 border-b transition-colors duration-300 ${
+        D
+          ? 'bg-slate-900 text-slate-100 border-white/5'
+          : 'bg-slate-50 text-slate-800 border-slate-200'
+      }`}>
         <div className="max-w-6xl mx-auto px-6">
           <StudentHome onAuthRequired={onLogin} />
         </div>
       </section>
 
-      {/* Mentorship Hub Section */}
-      <section id="mentorship" className="bg-white text-slate-800 py-24">
+      {/* ── Mentorship ─────────────────────────────────────────── */}
+      <section id="mentorship" className={`py-24 transition-colors duration-300 ${
+        D ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-800'
+      }`}>
         <div className="max-w-6xl mx-auto px-6">
           <MentorshipBoard onAuthRequired={onLogin} />
         </div>
       </section>
 
-      {/* About Section */}
-      <section id="about" className="bg-slate-950 border-t border-white/5 py-24">
+      {/* ── About ──────────────────────────────────────────────── */}
+      <section id="about" className={`border-t py-24 transition-colors duration-300 ${
+        D ? 'bg-slate-950 border-white/5' : 'bg-slate-50 border-slate-200'
+      }`}>
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
-            <h2 className="text-3xl font-black text-white">About Smart Campus Connect</h2>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <h2 className={`text-3xl font-black ${ D ? 'text-white' : 'text-slate-900'}`}>
+              About Smart Campus Connect
+            </h2>
+            <p className={`text-sm leading-relaxed ${ D ? 'text-slate-400' : 'text-slate-500'}`}>
               Our mission is to foster a safe, supportive, and interconnected university ecosystem. By consolidating student help desks, peer mentorship profiles, study materials, and gamified campus participation into a single platform, we empower student bodies to grow and learn together.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -370,37 +482,59 @@ function LandingPage({ onLogin, onRegister }: { onLogin: () => void; onRegister:
               ].map((txt, i) => (
                 <div key={i} className="flex items-center gap-2.5">
                   <CheckCircle className="w-5 h-5 text-blue-500 shrink-0" />
-                  <span className="text-slate-300 text-xs font-semibold">{txt}</span>
+                  <span className={`text-xs font-semibold ${ D ? 'text-slate-300' : 'text-slate-600'}`}>{txt}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="bg-gradient-to-br from-blue-600/10 to-purple-600/10 border border-white/5 rounded-3xl p-8 space-y-6 text-left">
-            <h4 className="font-extrabold text-white text-lg">💡 Quick Campus Tip</h4>
-            <p className="text-slate-400 text-xs leading-relaxed">
+
+          <div className={`border rounded-3xl p-8 space-y-6 text-left transition-colors duration-300 ${
+            D
+              ? 'bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-white/5'
+              : 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-100'
+          }`}>
+            <h4 className={`font-extrabold text-lg ${ D ? 'text-white' : 'text-slate-900'}`}>💡 Quick Campus Tip</h4>
+            <p className={`text-xs leading-relaxed ${ D ? 'text-slate-400' : 'text-slate-600'}`}>
               Did you know? Helping others pays off. For every verified found item you return, the administration awards you 50 points. Accruing points unlocks badges like <strong>Beginner Helper</strong>, <strong>Active Contributor</strong>, and the prestigious <strong>Campus Hero</strong> badge featured directly on your profile!
             </p>
-            <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3">
+            <div className={`flex items-center gap-3 border rounded-xl p-3 ${
+              D ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200 shadow-sm'
+            }`}>
               <span className="text-2xl">🏆</span>
               <div>
-                <p className="text-white font-bold text-xs">Unlock Rewards</p>
-                <p className="text-slate-400 text-[10px]">Start helping peers and get recognized today.</p>
+                <p className={`font-bold text-xs ${ D ? 'text-white' : 'text-slate-900'}`}>Unlock Rewards</p>
+                <p className={`text-[10px] ${ D ? 'text-slate-400' : 'text-slate-500'}`}>Start helping peers and get recognized today.</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-slate-950 border-t border-white/5 py-12 text-center text-slate-500 text-xs font-medium">
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <footer className={`border-t py-12 text-xs font-medium transition-colors duration-300 ${
+        D
+          ? 'bg-slate-950 border-white/5 text-slate-500'
+          : 'bg-slate-100 border-slate-200 text-slate-400'
+      }`}>
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="p-1.5 bg-blue-600 rounded-lg text-white"><Sparkles className="w-3.5 h-3.5" /></span>
-            <span className="font-bold text-slate-400">Smart Campus Connect</span>
+            <span className={`font-bold ${ D ? 'text-slate-400' : 'text-slate-600'}`}>Smart Campus Connect</span>
           </div>
           <p>© 2026 Smart Campus Connect. All rights reserved.</p>
-          <div className="flex gap-4">
-            <button onClick={() => scrollTo('home')} className="hover:text-white transition-colors">Back to top</button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onToggleDark}
+              title={D ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              className="theme-toggle"
+              aria-label="Toggle dark mode"
+            >
+              {D ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => scrollTo('home')}
+              className={`transition-colors ${ D ? 'hover:text-white' : 'hover:text-slate-900'}`}
+            >Back to top</button>
           </div>
         </div>
       </footer>
@@ -551,8 +685,9 @@ function AuthModal({ mode, onClose }: { mode: 'login' | 'register'; onClose: () 
 type NavChild = { id: string; label: string };
 type NavItem = { id: string; label: string; icon: any; children?: NavChild[] };
 
-function Sidebar({ items, activeTab, onSelect, user, onLogout }: {
+function Sidebar({ items, activeTab, onSelect, user, onLogout, isDark, onToggleDark }: {
   items: NavItem[]; activeTab: string; onSelect: (id: string) => void; user: any; onLogout: () => void;
+  isDark: boolean; onToggleDark: () => void;
 }) {
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const toggle = (id: string) => setOpenGroups(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -625,6 +760,23 @@ function Sidebar({ items, activeTab, onSelect, user, onLogout }: {
       </nav>
 
       <div className="px-4 py-4 border-t border-slate-100">
+        {/* Dark mode toggle row */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+            {isDark ? 'Dark Mode' : 'Light Mode'}
+          </span>
+          <button
+            onClick={onToggleDark}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="theme-toggle"
+            aria-label="Toggle dark mode"
+          >
+            {isDark
+              ? <Sun className="w-4 h-4 text-amber-400" />
+              : <Moon className="w-4 h-4" />}
+          </button>
+        </div>
+        {/* User row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img src={user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=80'}
@@ -643,7 +795,7 @@ function Sidebar({ items, activeTab, onSelect, user, onLogout }: {
   );
 }
 
-// ─── STUDENT: HOME (approved lost items cards) ─────────────────────────────────
+// ─── STUDENT: HOME (active lost items cards) ─────────────────────────────────
 
 function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired?: () => void }) {
   const [items, setItems] = useState<any[]>([]);
@@ -653,14 +805,15 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
   const [reportTarget, setReportTarget] = useState<any>(null);
   const [foundForm, setFoundForm] = useState({ title: '', description: '', category: 'Electronics', location: '', dateFound: '', image: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     API.get('/lostfound/lost').then(r => { if (r.data.success) setItems(r.data.items); })
       .catch(() => setItems([
-        { _id: '1', title: 'Dell Laptop', description: 'Black Dell laptop, 15 inch', category: 'Electronics', location: 'Library 2nd Floor', dateLost: '2026-06-20', status: 'approved', reporter: { name: 'Ahmed' }, image: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&q=80&w=600' },
-        { _id: '2', title: 'Blue Backpack', description: 'Nike blue backpack with books inside', category: 'Bag', location: 'Cafeteria', dateLost: '2026-06-21', status: 'approved', reporter: { name: 'Sara' }, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=600' },
-        { _id: '3', title: 'Student ID Card', description: 'ID card CS department 2024', category: 'ID/Cards', location: 'Gym', dateLost: '2026-06-22', status: 'approved', reporter: { name: 'Omar' }, image: '' },
-        { _id: '4', title: 'iPhone 15 Pro', description: 'Titanium silver iPhone, cracked case', category: 'Electronics', location: 'Lecture Hall A', dateLost: '2026-06-23', status: 'approved', reporter: { name: 'Lina' }, image: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&q=80&w=600' },
+        { _id: '1', title: 'Dell Laptop', description: 'Black Dell laptop, 15 inch', category: 'Electronics', location: 'Library 2nd Floor', dateLost: '2026-06-20', status: 'lost', reporter: { name: 'Ahmed' }, image: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&q=80&w=600' },
+        { _id: '2', title: 'Blue Backpack', description: 'Nike blue backpack with books inside', category: 'Bag', location: 'Cafeteria', dateLost: '2026-06-21', status: 'lost', reporter: { name: 'Sara' }, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=600' },
+        { _id: '3', title: 'Student ID Card', description: 'ID card CS department 2024', category: 'ID/Cards', location: 'Gym', dateLost: '2026-06-22', status: 'lost', reporter: { name: 'Omar' }, image: '' },
+        { _id: '4', title: 'iPhone 15 Pro', description: 'Titanium silver iPhone, cracked case', category: 'Electronics', location: 'Lecture Hall A', dateLost: '2026-06-23', status: 'lost', reporter: { name: 'Lina' }, image: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&q=80&w=600' },
       ])).finally(() => setLoading(false));
   }, []);
 
@@ -678,15 +831,36 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
     setSubmitting(true);
     try {
       await API.post('/lostfound/found', { ...foundForm, lostItemId: reportTarget?._id, dateFound: foundForm.dateFound || new Date().toISOString().split('T')[0] }, token ? cfg(token) : undefined);
-      alert('Found report submitted! Admin will review and confirm.');
+      // ── Immediately remove the item from the local board so it vanishes without a reload
+      if (reportTarget?._id) {
+        setItems(prev => prev.filter(i => i._id !== reportTarget._id));
+      }
+      setSuccessMsg(`"${reportTarget?.title}" has been marked as found and removed from the board.`);
       setReportTarget(null);
-    } catch { alert('Found report submitted! (Simulated)'); setReportTarget(null); }
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch {
+      // Even on error (e.g. backend offline), remove from local state for consistent UX
+      if (reportTarget?._id) {
+        setItems(prev => prev.filter(i => i._id !== reportTarget._id));
+      }
+      setSuccessMsg(`Found report submitted! "${reportTarget?.title}" removed from the board.`);
+      setReportTarget(null);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    }
     finally { setSubmitting(false); }
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="🏠 Lost & Found Board" subtitle="Browse admin-approved lost item reports. Found something? Report it!" />
+      <PageHeader title="🏠 Lost & Found Board" subtitle="Browse active lost item reports. Found something? Report it to help the owner!" />
+
+      {/* Success banner — shown when an item is marked as found and removed from board */}
+      {successMsg && (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl px-5 py-3 shadow-sm animate-pulse-once">
+          <svg className="w-5 h-5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          <p className="text-sm font-semibold">{successMsg}</p>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -702,7 +876,7 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={ShieldAlert} msg="No approved lost items found." />
+        <EmptyState icon={ShieldAlert} msg="No active lost items found." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filtered.map((item, i) => (
@@ -728,7 +902,7 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
                     <Calendar className="w-3 h-3" />{item.dateLost?.split('T')[0]}
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <StatusBadge status="approved" />
+                    <StatusBadge status="lost" />
                     <button onClick={() => {
                       if (!token) {
                         if (onAuthRequired) onAuthRequired();
@@ -758,7 +932,7 @@ function StudentHome({ token, onAuthRequired }: { token?: string; onAuthRequired
             <FormGroup label="Date Found"><Input type="date" value={foundForm.dateFound} onChange={e => setFoundForm({ ...foundForm, dateFound: e.target.value })} required /></FormGroup>
             <FormGroup label="Image URL (Optional)"><Input value={foundForm.image} onChange={e => setFoundForm({ ...foundForm, image: e.target.value })} placeholder="https://..." /></FormGroup>
             <div className="flex gap-3 pt-2">
-              <Btn type="submit" variant="success" className="flex-1 text-center" disabled={submitting}>{submitting ? 'Submitting...' : 'Send For Approval'}</Btn>
+              <Btn type="submit" variant="success" className="flex-1 text-center" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit Found Report'}</Btn>
               <Btn type="button" variant="secondary" onClick={() => setReportTarget(null)}>Cancel</Btn>
             </div>
           </form>
@@ -830,10 +1004,9 @@ function StudentDashboard({ user, token }: { user: any; token: string }) {
   const completedSessions = myReqs.filter(s => s.status === 'completed').length;
 
   const lostStatusData = [
-    { name: 'Pending', value: myLost.filter(i => i.status === 'pending').length || 1, color: '#f59e0b' },
-    { name: 'Approved', value: myLost.filter(i => i.status === 'approved').length || 1, color: '#3b82f6' },
-    { name: 'Rejected', value: myLost.filter(i => i.status === 'rejected').length || 0, color: '#ef4444' },
-    { name: 'Recovered', value: myLost.filter(i => i.status === 'completed').length || 1, color: '#10b981' },
+    { name: 'Active', value: myLost.filter(i => i.status === 'lost').length || 1, color: '#3b82f6' },
+    { name: 'Completed', value: myLost.filter(i => i.status === 'completed').length || 0, color: '#10b981' },
+    { name: 'Found', value: myLost.filter(i => i.status === 'found' || i.status === 'found_pending').length || 1, color: '#14b8a6' },
   ].filter(d => d.value > 0);
 
   const sessionPieData = [
@@ -989,8 +1162,8 @@ function StudentDashboard({ user, token }: { user: any; token: string }) {
             <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Bell className="w-4 h-4 text-purple-500" /> Recent Activity</h3>
             <div className="space-y-2">
               {[
-                { text: 'Lost item pending admin approval', time: 'Just now', color: 'bg-amber-400' },
-                { text: 'Admin approved your report', time: '2h ago', color: 'bg-blue-500' },
+                { text: 'Lost item published on the board', time: 'Just now', color: 'bg-blue-500' },
+                { text: 'Found report saved to your history', time: '2h ago', color: 'bg-emerald-500' },
                 { text: 'Mentor accepted your request', time: 'Yesterday', color: 'bg-emerald-500' },
               ].map((n, i) => (
                 <div key={i} className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-xl">
@@ -1049,16 +1222,16 @@ function ReportLostItem({ token, onSuccess }: { token: string; onSuccess: () => 
     e.preventDefault(); setLoading(true);
     try {
       await API.post('/lostfound/lost', form, cfg(token));
-      showToast('Report submitted! Awaiting admin approval.', 'success');
+      showToast('Report published! Your item is now live on the Lost & Found Board.', 'success');
       setForm({ title: '', description: '', category: 'Electronics', location: '', dateLost: '', contact: '', image: '' });
       setTimeout(onSuccess, 2000);
-    } catch { showToast('Submitted (simulated – backend may be offline)', 'success'); setTimeout(onSuccess, 2000); }
+    } catch { showToast('Published (simulated – backend may be offline)', 'success'); setTimeout(onSuccess, 2000); }
     finally { setLoading(false); }
   };
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Report Lost Item" subtitle="Fill in the details below. Your report will be reviewed by an admin before being published." />
+      <PageHeader title="Report Lost Item" subtitle="Fill in the details below. Your report will be published instantly on the Home board for all students to see." />
       {toast && <Toast message={toast.msg} type={toast.type} />}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
         <FormGroup label="Item Name"><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. iPhone 15 Pro Max" required /></FormGroup>
@@ -1071,7 +1244,7 @@ function ReportLostItem({ token, onSuccess }: { token: string; onSuccess: () => 
         <FormGroup label="Contact (Phone/Email)"><Input value={form.contact} onChange={e => setForm({ ...form, contact: e.target.value })} placeholder="How can finder reach you?" /></FormGroup>
         <FormGroup label="Image URL (Optional)"><Input value={form.image} onChange={e => setForm({ ...form, image: e.target.value })} placeholder="https://..." /></FormGroup>
         <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-slate-400">Status after submit: <StatusBadge status="pending" /></p>
+          <p className="text-xs text-slate-400">Status after submit: <StatusBadge status="lost" /></p>
           <Btn type="submit" disabled={loading}>{loading ? 'Submitting...' : 'Submit Lost Item'}</Btn>
         </div>
       </form>
@@ -1104,7 +1277,7 @@ function BrowseLostItems() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Browse Lost Items" subtitle="All published lost item reports on campus." />
+      <PageHeader title="Browse Lost Items" subtitle="All active lost item reports on campus. Help reunite students with their belongings!" />
       <div className="flex flex-wrap gap-3">
         <SearchBar value={search} onChange={setSearch} placeholder="Search item name..." />
         <select value={category} onChange={e => setCategory(e.target.value)}
@@ -1113,7 +1286,7 @@ function BrowseLostItems() {
           {CATEGORIES.map(c => <option key={c}>{c}</option>)}
         </select>
       </div>
-      {filtered.length === 0 ? <EmptyState icon={ShieldAlert} msg="No approved lost items match your search." /> : (
+      {filtered.length === 0 ? <EmptyState icon={ShieldAlert} msg="No active lost items match your search." /> : (
         <Table headers={['Item', 'Category', 'Location', 'Date', 'Owner', 'Status']}>
           {filtered.map((item, i) => (
             <Tr key={i}>
@@ -1122,7 +1295,7 @@ function BrowseLostItems() {
               <Td className="text-slate-500">{item.location}</Td>
               <Td className="text-slate-500">{item.dateLost?.split('T')[0]}</Td>
               <Td className="text-slate-500">{item.reporter?.name || '—'}</Td>
-              <Td><StatusBadge status="approved" /></Td>
+              <Td><StatusBadge status="lost" /></Td>
             </Tr>
           ))}
         </Table>
@@ -1141,8 +1314,8 @@ function MyItems({ token }: { token: string }) {
 
   useEffect(() => {
     API.get('/lostfound/my-lost', cfg(token)).then(r => { if (r.data.success) setLostItems(r.data.items); }).catch(() => setLostItems([
-      { _id: '1', title: 'iPhone 15', category: 'Electronics', location: 'Cafeteria', dateLost: '2026-06-20', status: 'pending' },
-      { _id: '2', title: 'Calculus Book', category: 'Books', location: 'Library', dateLost: '2026-06-18', status: 'approved' },
+      { _id: '1', title: 'iPhone 15', category: 'Electronics', location: 'Cafeteria', dateLost: '2026-06-20', status: 'lost' },
+      { _id: '2', title: 'Calculus Book', category: 'Books', location: 'Library', dateLost: '2026-06-18', status: 'lost' },
       { _id: '3', title: 'Student ID', category: 'ID/Cards', location: 'Gym', dateLost: '2026-06-15', status: 'completed' },
     ]));
     API.get('/lostfound/my-found', cfg(token)).then(r => { if (r.data.success) setFoundItems(r.data.items); }).catch(() => setFoundItems([
@@ -1214,7 +1387,7 @@ function ReportFoundItem({ token }: { token: string }) {
     e.preventDefault(); setLoading(true);
     try {
       await API.post('/lostfound/found', form, cfg(token));
-      showToast('Found report submitted! Admin will review and confirm.', 'success');
+      showToast('Found report saved to your history! The owner will be notified.', 'success');
       setForm({ title: '', description: '', category: 'Electronics', location: '', dateFound: '', image: '', lostItemId: '' });
     } catch { showToast('Submitted (simulated).', 'success'); setForm({ title: '', description: '', category: 'Electronics', location: '', dateFound: '', image: '', lostItemId: '' }); }
     finally { setLoading(false); }
@@ -1222,7 +1395,7 @@ function ReportFoundItem({ token }: { token: string }) {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Report Found Item" subtitle="Found something? Submit a report so the admin can notify the owner." />
+      <PageHeader title="Report Found Item" subtitle="Found something on campus? Submit a report. It will be saved to your personal history and the owner will be notified." />
       {toast && <Toast message={toast.msg} type={toast.type} />}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
         <FormGroup label="Linked Lost Item (Optional)">
@@ -1240,8 +1413,8 @@ function ReportFoundItem({ token }: { token: string }) {
         <FormGroup label="Found Location"><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Where did you find it?" required /></FormGroup>
         <FormGroup label="Image URL (Optional)"><Input value={form.image} onChange={e => setForm({ ...form, image: e.target.value })} placeholder="https://..." /></FormGroup>
         <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-slate-400">Status after submit: <StatusBadge status="found_pending" /></p>
-          <Btn type="submit" variant="success" disabled={loading}>{loading ? 'Submitting...' : 'Send For Approval'}</Btn>
+          <p className="text-xs text-slate-400">This report will be saved to your history only (not public).</p>
+          <Btn type="submit" variant="success" disabled={loading}>{loading ? 'Submitting...' : 'Submit Found Report'}</Btn>
         </div>
       </form>
     </div>
@@ -1986,9 +2159,9 @@ function AdminAllLostItems({ token }: { token: string }) {
 
   const fetchItems = useCallback(() => {
     API.get('/admin/lostfound', cfg(token)).then(r => { if (r.data.success) setItems(r.data.lost); }).catch(() => setItems([
-      { _id: '1', title: 'MacBook Pro', category: 'Electronics', location: 'Library', dateLost: '2026-06-20', status: 'pending', reporter: { name: 'Ahmed Yusuf' } },
-      { _id: '2', title: 'Blue Backpack', category: 'Bag', location: 'Cafeteria', dateLost: '2026-06-19', status: 'approved', reporter: { name: 'Sara Hassan' } },
-      { _id: '3', title: 'ID Card', category: 'ID/Cards', location: 'Gym', dateLost: '2026-06-18', status: 'rejected', reporter: { name: 'Omar' } },
+      { _id: '1', title: 'MacBook Pro', category: 'Electronics', location: 'Library', dateLost: '2026-06-20', status: 'lost', reporter: { name: 'Ahmed Yusuf' } },
+      { _id: '2', title: 'Blue Backpack', category: 'Bag', location: 'Cafeteria', dateLost: '2026-06-19', status: 'lost', reporter: { name: 'Sara Hassan' } },
+      { _id: '3', title: 'ID Card', category: 'ID/Cards', location: 'Gym', dateLost: '2026-06-18', status: 'found_pending', reporter: { name: 'Omar' } },
       { _id: '4', title: 'iPhone 14', category: 'Electronics', location: 'Hall A', dateLost: '2026-06-17', status: 'completed', reporter: { name: 'Lina' } },
     ]));
   }, [token]);
@@ -2033,7 +2206,7 @@ function AdminAllLostItems({ token }: { token: string }) {
         <SearchBar value={search} onChange={setSearch} placeholder="Search item / location / owner..." />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
           <option value="">All Statuses</option>
-          {['pending','approved','rejected','completed'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+          {['lost','found_pending','found','completed','cancelled'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
         </select>
         <button onClick={fetchItems} className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"><RefreshCw className="w-4 h-4 text-slate-500" /></button>
       </div>
@@ -2111,7 +2284,7 @@ function AdminPendingLost({ token, onRefresh }: { token: string; onRefresh: () =
   return (
     <div className="space-y-5">
       {toast && <Toast message={toast.msg} type={toast.type} />}
-      <PageHeader title="Pending Lost Items" subtitle="Review and approve or reject student lost item reports." />
+      <PageHeader title="Pending Lost Items" subtitle="Lost item reports are now published automatically. This queue shows older items that were submitted before the policy change." />
       <SearchBar value={search} onChange={setSearch} placeholder="Search item / student name..." />
       {filtered.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center"><CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" /><p className="text-slate-500 font-semibold">No pending items. All clear!</p></div> : (
         <Table headers={['Item', 'Student', 'Category', 'Location', 'Date', 'Actions']}>
@@ -2142,7 +2315,7 @@ function AdminApprovedItems({ token }: { token: string }) {
   const filtered = items.filter(i => i.title?.toLowerCase().includes(search.toLowerCase()) || i.reporter?.name?.toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="space-y-5">
-      <PageHeader title="Approved Items" subtitle="All published lost item reports visible to students." />
+      <PageHeader title="Published Items" subtitle="All active lost item reports currently visible to students on the board." />
       <SearchBar value={search} onChange={setSearch} placeholder="Search item / owner..." />
       <Table headers={['Item', 'Owner', 'Category', 'Location', 'Date', 'Status']}>
         {filtered.map((item, i) => (<Tr key={i}><Td className="font-semibold text-slate-800">{item.title}</Td><Td className="text-slate-600">{item.reporter?.name || '—'}</Td><Td className="text-slate-500">{item.category}</Td><Td className="text-slate-500">{item.location}</Td><Td className="text-slate-500">{item.dateLost?.split('T')[0]}</Td><Td><StatusBadge status="approved" /></Td></Tr>))}
@@ -2174,7 +2347,7 @@ function AdminPendingFound({ token, onRefresh }: { token: string; onRefresh: () 
   return (
     <div className="space-y-5">
       {toast && <Toast message={toast.msg} type={toast.type} />}
-      <PageHeader title="Pending Found Items" subtitle="Review and confirm found item submissions." />
+      <PageHeader title="Pending Found Items" subtitle="Review found item submissions. Once confirmed, the finder is awarded 50 points and the item is saved to their history." />
       <SearchBar value={search} onChange={setSearch} placeholder="Search item / finder name..." />
       {filtered.length === 0 ? <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center"><CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" /><p className="text-slate-500 font-semibold">No pending found items.</p></div> : (
         <Table headers={['Item', 'Finder', 'Description', 'Location', 'Date', 'Action']}>
@@ -2211,6 +2384,119 @@ function AdminCompletedItems({ token }: { token: string }) {
       <Table headers={['Item', 'Reporter', 'Category', 'Status']}>
         {filtered.map((item, i) => (<Tr key={i}><Td className="font-semibold text-slate-800">{item.title}</Td><Td className="text-slate-600">{item.reporter?.name || '—'}</Td><Td className="text-slate-500">{item.category}</Td><Td><StatusBadge status={item.status} /></Td></Tr>))}
       </Table>
+    </div>
+  );
+}
+
+// ─── ADMIN: ALL FOUND ITEMS (full list) ────────────────────────────────────────
+function AdminAllFoundItems({ token }: { token: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const showToast = (msg: string, type: 'success' | 'error') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const fetchItems = useCallback(() => {
+    setLoading(true);
+    API.get('/admin/lostfound', cfg(token))
+      .then(r => { if (r.data.success) setItems(r.data.found); })
+      .catch(() => setItems([
+        { _id: '1', title: 'Black Wallet', description: 'Found near gym entrance', category: 'Wallet', location: 'Gym', dateFound: '2026-06-22', status: 'found_pending', reporter: { name: 'Ali Hassan', email: 'ali@uni.edu' } },
+        { _id: '2', title: 'Car Keys', description: 'Toyota key with blue tag', category: 'Keys', location: 'Parking Lot', dateFound: '2026-06-23', status: 'found', reporter: { name: 'Sara K', email: 'sara@uni.edu' } },
+        { _id: '3', title: 'Glasses Case', description: 'Black hard-shell case with glasses', category: 'Other', location: 'Library', dateFound: '2026-06-24', status: 'returned', reporter: { name: 'Omar M', email: 'omar@uni.edu' } },
+      ]))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleConfirm = async (id: string) => {
+    try {
+      await API.put(`/admin/lostfound/${id}/confirm-found`, {}, cfg(token));
+      showToast('Found item confirmed! Finder awarded 50 points.', 'success');
+      fetchItems();
+    } catch { showToast('Confirmed (simulated).', 'success'); fetchItems(); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await API.delete(`/admin/lostfound/${id}/found`, cfg(token));
+      showToast('Item deleted.', 'success');
+    } catch { showToast('Deleted (simulated).', 'success'); }
+    fetchItems();
+  };
+
+  const filtered = items.filter(i =>
+    (i.title?.toLowerCase().includes(search.toLowerCase()) ||
+      i.reporter?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      i.location?.toLowerCase().includes(search.toLowerCase())) &&
+    (statusFilter ? i.status === statusFilter : true)
+  );
+
+  return (
+    <div className="space-y-5">
+      {toast && <Toast message={toast.msg} type={toast.type} />}
+      <PageHeader title="📋 All Found Items" subtitle="Complete list of every found item submission across all statuses." />
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search item / finder / location..." />
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+        >
+          <option value="">All Statuses</option>
+          {['found_pending', 'found', 'claimed', 'returned'].map(s => (
+            <option key={s} value={s} className="capitalize">{s.replace('_', ' ')}</option>
+          ))}
+        </select>
+        <button onClick={fetchItems} className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors" title="Refresh">
+          <RefreshCw className="w-4 h-4 text-slate-500" />
+        </button>
+        <span className="text-sm text-slate-500 font-medium">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+          <p className="text-slate-500 font-semibold">No found items match your filter.</p>
+        </div>
+      ) : (
+        <Table headers={['Item', 'Finder', 'Category', 'Location', 'Date Found', 'Status', 'Actions']}>
+          {filtered.map((item, i) => (
+            <Tr key={i}>
+              <Td>
+                <p className="font-semibold text-slate-800">{item.title}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5 max-w-[160px] truncate">{item.description}</p>
+              </Td>
+              <Td>
+                <p className="text-sm text-slate-700 font-medium">{item.reporter?.name || '—'}</p>
+                <p className="text-[10px] text-slate-400">{item.reporter?.email}</p>
+              </Td>
+              <Td className="text-slate-500">{item.category}</Td>
+              <Td className="text-slate-500">{item.location}</Td>
+              <Td className="text-slate-500">{(item.dateFound || item.createdAt)?.split('T')[0]}</Td>
+              <Td><StatusBadge status={item.status} /></Td>
+              <Td>
+                <div className="flex items-center gap-1">
+                  {item.status === 'found_pending' && (
+                    <Btn variant="success" size="sm" onClick={() => handleConfirm(item._id)}>
+                      <Check className="w-3 h-3 mr-1 inline" />Confirm
+                    </Btn>
+                  )}
+                  <Btn variant="danger" size="sm" onClick={() => handleDelete(item._id)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Btn>
+                </div>
+              </Td>
+            </Tr>
+          ))}
+        </Table>
+      )}
     </div>
   );
 }
@@ -2983,6 +3269,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMentor, setSelectedMentor] = useState<any>(null);
   const [mentorSessions, setMentorSessions] = useState<any[]>([]);
+  const [isDark, toggleDark] = useDarkMode();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -2996,7 +3283,12 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <>
-        <LandingPage onLogin={() => { setAuthMode('login'); setShowAuth(true); }} onRegister={() => { setAuthMode('register'); setShowAuth(true); }} />
+        <LandingPage
+          onLogin={() => { setAuthMode('login'); setShowAuth(true); }}
+          onRegister={() => { setAuthMode('register'); setShowAuth(true); }}
+          isDark={isDark}
+          onToggleDark={toggleDark}
+        />
         {showAuth && <AuthModal mode={authMode} onClose={() => setShowAuth(false)} />}
       </>
     );
@@ -3047,10 +3339,9 @@ export default function App() {
       id: 'lf-group', label: 'Lost & Found', icon: ShieldAlert,
       children: [
         { id: 'all-lost-items', label: 'All Lost Items' },
-        { id: 'pending-lost', label: 'Pending Lost Items' },
-        { id: 'approved-items', label: 'Approved Items' },
-        { id: 'pending-found', label: 'Pending Found Items' },
-        { id: 'completed-items', label: 'Completed Items' },
+        { id: 'admin-report-lost', label: 'Report Lost Item' },
+        { id: 'admin-report-found', label: 'Report Found Item' },
+        { id: 'all-found-items', label: 'List of Found Items' },
       ]
     },
     {
@@ -3121,6 +3412,9 @@ export default function App() {
       if (activeTab === 'home') return <StudentHome token={token} />;
       if (activeTab === 'dashboard') return <AdminDashboard token={token} />;
       if (activeTab === 'all-lost-items') return <AdminAllLostItems token={token} />;
+      if (activeTab === 'admin-report-lost') return <ReportLostItem token={token} onSuccess={() => setActiveTab('all-lost-items')} />;
+      if (activeTab === 'admin-report-found') return <ReportFoundItem token={token} />;
+      if (activeTab === 'all-found-items') return <AdminAllFoundItems token={token} />;
       if (activeTab === 'pending-lost') return <AdminPendingLost token={token} onRefresh={() => {}} />;
       if (activeTab === 'approved-items') return <AdminApprovedItems token={token} />;
       if (activeTab === 'pending-found') return <AdminPendingFound token={token} onRefresh={() => {}} />;
@@ -3140,7 +3434,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800 overflow-x-hidden">
-      <Sidebar items={navItems} activeTab={activeTab} onSelect={handleSelectTab} user={user} onLogout={logout} />
+      <Sidebar items={navItems} activeTab={activeTab} onSelect={handleSelectTab} user={user} onLogout={logout} isDark={isDark} onToggleDark={toggleDark} />
       <main className="flex-1 overflow-y-auto min-h-screen">
         <div className="max-w-6xl mx-auto px-8 py-8">
           {renderPage()}

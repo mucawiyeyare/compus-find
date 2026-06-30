@@ -2,13 +2,182 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── CSS Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg-app:        #f8fafc; /* slate-50 */
+  --bg-sidebar:    #ffffff;
+  --bg-card:       #ffffff;
+  --bg-table:      #ffffff;
+  --bg-thead:      #f8fafc;
+  --bg-tr-hover:   #f8fafc;
+  --bg-input:      #ffffff;
+  --bg-modal:      #ffffff;
+  --bg-modal-head: #ffffff;
+  --bg-tag-blue:   #eff6ff;
+  --bg-tag-amber:  #fffbeb;
+
+  --text-primary:  #0f172a; /* slate-900 */
+  --text-secondary:#475569; /* slate-600 */
+  --text-muted:    #94a3b8; /* slate-400 */
+  --text-subtle:   #64748b; /* slate-500 */
+
+  --border-main:   #e2e8f0; /* slate-200 */
+  --border-light:  #f1f5f9; /* slate-100 */
+
+  --scrollbar-bg:  rgba(15,23,42,0.15);
+  --scrollbar-hover: rgba(15,23,42,0.3);
+}
+
+html.dark {
+  --bg-app:        #0f172a; /* slate-900 */
+  --bg-sidebar:    #1e293b; /* slate-800 */
+  --bg-card:       #1e293b;
+  --bg-table:      #1e293b;
+  --bg-thead:      #0f172a;
+  --bg-tr-hover:   #0f172a;
+  --bg-input:      #0f172a;
+  --bg-modal:      #1e293b;
+  --bg-modal-head: #1e293b;
+  --bg-tag-blue:   rgba(37,99,235,0.15);
+  --bg-tag-amber:  rgba(245,158,11,0.15);
+
+  --text-primary:  #f1f5f9; /* slate-100 */
+  --text-secondary:#94a3b8; /* slate-400 */
+  --text-muted:    #64748b; /* slate-500 */
+  --text-subtle:   #94a3b8;
+
+  --border-main:   #334155; /* slate-700 */
+  --border-light:  #1e293b;
+
+  --scrollbar-bg:  rgba(255,255,255,0.1);
+  --scrollbar-hover: rgba(255,255,255,0.25);
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 selection:bg-primary-500 selection:text-white;
+    @apply selection:bg-blue-500 selection:text-white;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
-/* Premium Light Glassmorphic cards */
+/* ─── Dark Mode — Global Overrides ──────────────────────────────────────────── */
+
+/* App shell */
+html.dark .min-h-screen.bg-slate-50,
+html.dark .bg-slate-50 { background-color: var(--bg-app) !important; }
+
+/* Sidebar */
+html.dark aside.bg-white,
+html.dark .bg-white { background-color: var(--bg-card) !important; }
+html.dark .border-slate-200 { border-color: var(--border-main) !important; }
+html.dark .border-slate-100 { border-color: var(--border-light) !important; }
+
+/* Text colours */
+html.dark .text-slate-900  { color: var(--text-primary) !important; }
+html.dark .text-slate-800  { color: var(--text-primary) !important; }
+html.dark .text-slate-700  { color: var(--text-secondary) !important; }
+html.dark .text-slate-600  { color: var(--text-secondary) !important; }
+html.dark .text-slate-500  { color: var(--text-subtle) !important; }
+html.dark .text-slate-400  { color: var(--text-muted) !important; }
+
+/* Sidebar nav items */
+html.dark .hover\:bg-slate-50:hover { background-color: rgba(255,255,255,0.06) !important; }
+html.dark .hover\:text-slate-900:hover { color: var(--text-primary) !important; }
+html.dark .hover\:text-slate-800:hover { color: var(--text-primary) !important; }
+
+/* Active nav item */
+html.dark .bg-blue-50 { background-color: rgba(37,99,235,0.15) !important; }
+html.dark .bg-blue-100 { background-color: rgba(37,99,235,0.2) !important; }
+
+/* Tables */
+html.dark .bg-white.rounded-2xl,
+html.dark .bg-white.rounded-xl { background-color: var(--bg-card) !important; }
+html.dark thead.bg-slate-50 { background-color: var(--bg-thead) !important; }
+html.dark .divide-slate-100 > * + * { border-color: var(--border-light) !important; }
+html.dark tr.hover\:bg-slate-50:hover { background-color: var(--bg-tr-hover) !important; }
+
+/* Cards & panels */
+html.dark .shadow-sm { --tw-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; }
+
+/* Inputs, selects, textareas */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-main) !important;
+  color: var(--text-primary) !important;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: var(--text-muted) !important; }
+html.dark input[type="date"],
+html.dark input[type="time"] { color-scheme: dark; }
+
+/* Modals */
+html.dark .fixed.inset-0 .bg-white {
+  background-color: var(--bg-modal) !important;
+}
+html.dark .sticky.top-0.bg-white {
+  background-color: var(--bg-modal-head) !important;
+}
+
+/* Stat cards with border */
+html.dark .border.border-slate-200 {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-main) !important;
+}
+
+/* Ghost / secondary buttons */
+html.dark .bg-slate-100 { background-color: rgba(255,255,255,0.08) !important; }
+html.dark .hover\:bg-slate-200:hover { background-color: rgba(255,255,255,0.12) !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: rgba(255,255,255,0.06) !important; }
+html.dark .text-slate-700 { color: var(--text-secondary) !important; }
+
+/* Dividers */
+html.dark .border-t { border-color: var(--border-main) !important; }
+html.dark .border-b { border-color: var(--border-main) !important; }
+html.dark .border-l-2 { border-color: var(--border-main) !important; }
+
+/* Landing page lostfound & mentorship sections */
+html.dark section.bg-slate-50 { background-color: var(--bg-app) !important; }
+html.dark section.bg-white { background-color: #111827 !important; }
+
+/* Avatar border */
+html.dark .border-slate-200.shrink-0 { border-color: var(--border-main) !important; }
+
+/* Profile / settings cards */
+html.dark .rounded-2xl.bg-white,
+html.dark .rounded-xl.bg-white { background-color: var(--bg-card) !important; }
+
+/* Charts — tooltip background */
+html.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-main) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Status badge light backgrounds */
+html.dark .bg-amber-100  { background-color: rgba(245,158,11,0.15) !important; }
+html.dark .bg-blue-100   { background-color: rgba(37,99,235,0.15) !important; }
+html.dark .bg-red-100    { background-color: rgba(239,68,68,0.15) !important; }
+html.dark .bg-emerald-100{ background-color: rgba(16,185,129,0.15) !important; }
+html.dark .bg-orange-100 { background-color: rgba(249,115,22,0.15) !important; }
+html.dark .bg-green-100  { background-color: rgba(34,197,94,0.15) !important; }
+html.dark .bg-teal-100   { background-color: rgba(20,184,166,0.15) !important; }
+html.dark .bg-slate-100  { background-color: rgba(255,255,255,0.08) !important; }
+html.dark .bg-purple-100 { background-color: rgba(168,85,247,0.15) !important; }
+html.dark .bg-violet-100 { background-color: rgba(139,92,246,0.15) !important; }
+
+/* Smooth theme transition on ALL elements */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.25s;
+  transition-timing-function: ease;
+}
+
+/* ─── Glass panel ────────────────────────────────────────────────────────────── */
 .glass-panel {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(16px);
@@ -16,47 +185,76 @@
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04);
 }
+html.dark .glass-panel {
+  background: rgba(30,41,59,0.7);
+  border-color: rgba(255,255,255,0.06);
+  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.3);
+}
 
 .glass-panel-hover {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
 .glass-panel-hover:hover {
   background: rgba(255, 255, 255, 0.85);
   border-color: rgba(15, 23, 42, 0.12);
   box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.08);
   transform: translateY(-2px);
 }
-
-/* Custom Scrollbars for light mode */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+html.dark .glass-panel-hover:hover {
+  background: rgba(30,41,59,0.9);
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+/* ─── Custom Scrollbars ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.15);
+  background: var(--scrollbar-bg);
   border-radius: 9999px;
 }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.3);
-}
-
-/* Linear-styled gradient borders */
+/* ─── Gradient border ────────────────────────────────────────────────────────── */
 .gradient-border {
   position: relative;
   border-radius: 0.75rem;
   background: linear-gradient(135deg, #2563EB, #7C3AED);
   padding: 1px;
 }
-
 .gradient-border-inner {
   background: #FFFFFF;
   border-radius: 11px;
   height: 100%;
+}
+html.dark .gradient-border-inner {
+  background: var(--bg-card);
+}
+
+/* ─── Dark mode toggle button ────────────────────────────────────────────────── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-main);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-thead);
+  border-color: var(--border-main);
+  transform: scale(1.08);
+}
+html.dark .theme-toggle {
+  background: rgba(255,255,255,0.06);
+}
+html.dark .theme-toggle:hover {
+  background: rgba(255,255,255,0.12);
 }
